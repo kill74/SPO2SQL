@@ -19,7 +19,7 @@ namespace Bring.Sharepoint
 
     public SPOUser(string username, string password)
     {
-        Console.WriteLine("user=" + username + "pass=" + password); // DEBUG\
+        Console.WriteLine("user=" + username + " pass=" + password); 
         this.username = username;
         this.securePW = new SecureString();
         foreach (char c in password.ToCharArray())
