@@ -22,16 +22,15 @@ namespace Bring.SPODataQuality
 
                 var list1 = new SPOList();
                 list1.SPOUser = spoUser;
-                Console.WriteLine("DEBUG: Primeiro SPOList configurado"); // Debug
+                Console.WriteLine("DEBUG: Primeiro SPOList configurado"); 
 
                 var list2 = new SPOList();
                 list2.SPOUser = spoUser;
-                Console.WriteLine("DEBUG: Segundo SPOList configurado"); //Debug
-
+                Console.WriteLine("DEBUG: Segundo SPOList configurado"); 
                 if ((uint)args.Length > 0U)
                 {
                     string lower = args[0].ToLower();
-                    Console.WriteLine("DEBUG: Argumento recebido - " + lower); //Debug
+                    Console.WriteLine("DEBUG: Argumento recebido - " + lower); 
 
                     if (!(lower == "daily"))
                     {
@@ -47,7 +46,7 @@ namespace Bring.SPODataQuality
                     }
                     else
                     {
-                        Console.WriteLine("DEBUG: Executando daily"); //Debug
+                        Console.WriteLine("DEBUG: Executando daily"); 
                         RefreshSQLLists.SPOtoSQLUpdate(true);
                     }
                 }
@@ -63,7 +62,7 @@ namespace Bring.SPODataQuality
 
         public static void GetAllLists()
         {
-            Console.WriteLine("DEBUG: Entrando em GetAllLists"); // Debug
+            Console.WriteLine("DEBUG: Entrando em GetAllLists"); 
             SPOUser spoUser = new SPOUser("Guilherme.sales@bringglobal.com", "UtKid_3AV^r]H+");
             Context context = new Context()
             {
@@ -72,7 +71,7 @@ namespace Bring.SPODataQuality
             };
             foreach (List allList in (ClientObjectCollection<List>)context.GetAllLists())
             {
-                Console.WriteLine("DEBUG: Carregando lista - " + allList.Title); // Debug
+                Console.WriteLine("DEBUG: Carregando lista - " + allList.Title); 
                 context.Ctx.Load<List>(allList, new Expression<Func<List, object>>[1]
                 {
                     (Expression<Func<List, object>>) (l => (object) l.IsSystemList)
@@ -84,7 +83,7 @@ namespace Bring.SPODataQuality
 
         private static void SPODebug(string listName, string ctxURL, SPOUser user)
         {
-            Console.WriteLine("DEBUG: Entrando em SPODebug"); // Debug
+            Console.WriteLine("DEBUG: Entrando em SPODebug"); 
             SPOList spoList = new SPOList
             {
                 Name = listName,
@@ -93,7 +92,7 @@ namespace Bring.SPODataQuality
                 CAMLQuery = "<View><RowLimit>1</RowLimit></View>"
             };
 
-            Console.WriteLine("DEBUG: Executando Build"); // Debug
+            Console.WriteLine("DEBUG: Executando Build"); 
             spoList.Build();
 
             Console.WriteLine("DEBUG: Executando PropsToString");
@@ -104,10 +103,10 @@ namespace Bring.SPODataQuality
         {
             try
             {
-                Console.WriteLine("DEBUG: Iniciando RefreshListsSPO"); // Debug
+                Console.WriteLine("DEBUG: Iniciando RefreshListsSPO"); 
 
                 sourceList.Build();
-                Console.WriteLine("DEBUG: sourceList.Build concluído"); // Debug
+                Console.WriteLine("DEBUG: sourceList.Build concluído"); 
 
                 destList.Build();
                 Console.WriteLine("DEBUG: destList.Build concluído");
@@ -116,7 +115,7 @@ namespace Bring.SPODataQuality
                 int num2 = 0;
 
                 string[,] actualFields = GetActualFields(sourceList, destList);
-                Console.WriteLine("DEBUG: Campos obtidos"); // Debug
+                Console.WriteLine("DEBUG: Campos obtidos"); 
 
                 if ((uint)sourceList.ItemCollection.Count > 0U)
                     num1 = (int)sourceList.ItemCollection[sourceList.ItemCollection.Count - 1]["ID"];
@@ -125,7 +124,7 @@ namespace Bring.SPODataQuality
 
                 if (num2 < num1)
                 {
-                    Console.WriteLine("DEBUG: Adicionando novos itens"); // Debug
+                    Console.WriteLine("DEBUG: Adicionando novos itens"); 
                     do
                     {
                         destList.AddItem();
@@ -157,7 +156,7 @@ namespace Bring.SPODataQuality
 
         private static string[,] GetActualFields(SPOList listone, SPOList listtwo)
         {
-            Console.WriteLine("DEBUG: Entrando em GetActualFields"); // Debug
+            Console.WriteLine("DEBUG: Entrando em GetActualFields"); 
 
             List<Field> fields1 = GetFields(listone);
             List<Field> fields2 = GetFields(listtwo);
@@ -176,7 +175,7 @@ namespace Bring.SPODataQuality
                     {
                         strArray[index1, 0] = field2.InternalName;
                         strArray[index1, 1] = field1.InternalName;
-                        Console.WriteLine($"DEBUG: Match found - {field1.Title}"); // Debug
+                        Console.WriteLine($"DEBUG: Match found - {field1.Title}"); 
                     }
                     ++index2;
                 }
@@ -191,7 +190,7 @@ namespace Bring.SPODataQuality
 
         private static List<Field> GetFields(SPOList list)
         {
-            Console.WriteLine("DEBUG: Entrando em GetFields"); // Debug
+            Console.WriteLine("DEBUG: Entrando em GetFields"); 
 
             List<Field> fieldList = new List<Field>();
             foreach (Field field in (ClientObjectCollection<Field>)list.Fields)
@@ -199,7 +198,7 @@ namespace Bring.SPODataQuality
                 if (!field.FromBaseType || field.InternalName == "Title")
                 {
                     fieldList.Add(field);
-                    Console.WriteLine($"DEBUG: Campo adicionado - {field.Title}"); // Debug
+                    Console.WriteLine($"DEBUG: Campo adicionado - {field.Title}"); 
                 }
             }
 
