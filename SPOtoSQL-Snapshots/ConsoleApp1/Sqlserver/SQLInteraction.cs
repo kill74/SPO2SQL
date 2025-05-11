@@ -1,11 +1,11 @@
 ﻿using Bring.Sharepoint;
+using Bring.XmlConfig;
 using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Globalization;
 using System.Text;
-using System.Xml;
 
 namespace Bring.Sqlserver
 {
@@ -25,8 +25,7 @@ namespace Bring.Sqlserver
 
             this.TableName = this.ToPascalCase(this.List.Name, false);
 
-            // WARNING: Move to secure config or environment variable
-            this.Connection = new SqlConnection("Server=10.11.30.20;Database=LAKEDB;Persist Security Info=False;User ID=SQL_Server_user;Password=pass");
+            this.Connection = new SqlConnection(ConfigurationReader.GetSqlConnectionString());
             Console.WriteLine("Opening SQL connection...");
             this.Connection.Open();
 

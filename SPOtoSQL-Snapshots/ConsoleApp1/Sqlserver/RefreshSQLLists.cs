@@ -1,13 +1,7 @@
-﻿// Decompiled with JetBrains decompiler
-// Type: Bring.Sqlserver.RefreshSQLLists
-// Assembly: ConsoleApp1, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
-// MVID: 2529ACA9-9F81-4C49-8E47-E8B02D261367
-// Assembly location: C:\Users\KEVIN\Desktop\Visual Studio\SPtoSP\ConsoleApp1.exe
-
-using Bring.Sharepoint;
+﻿using Bring.Sharepoint;
+using Bring.XmlConfig;
 using System;
 using System.Configuration;
-using System.Xml;
 
 namespace Bring.Sqlserver
 {
@@ -17,7 +11,8 @@ namespace Bring.Sqlserver
         {
             Console.WriteLine("Starting SPO to SQL update. Daily: " + daily);
 
-            SPOUser user = new SPOUser("Guilherme.sales@bringglobal.com", "UtKid_3AV^r]H+"); // NOTE: Remove hardcoded credentials for security
+            var (username, password) = ConfigurationReader.GetSharePointCredentials();
+            SPOUser user = new SPOUser(username, password);
 
             foreach (string allKey in ConfigurationManager.AppSettings.AllKeys)
             {
