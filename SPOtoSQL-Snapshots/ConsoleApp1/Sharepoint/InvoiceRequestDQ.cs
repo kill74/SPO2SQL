@@ -1,88 +1,137 @@
-﻿// Decompiled with JetBrains decompiler
-// Type: Bring.Sharepoint.InvoiceRequestDQ
-// Assembly: ConsoleApp1, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
-// MVID: 2529ACA9-9F81-4C49-8E47-E8B02D261367
-// Assembly location: C:\Users\KEVIN\Desktop\Visual Studio\SPtoSP\ConsoleApp1.exe
-
-using Microsoft.SharePoint.Client;
+﻿using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
 
 namespace Bring.Sharepoint
 {
-  internal class InvoiceRequestDQ
-  {
-    public SPOUser Me { get; set; }
-
-    public bool UpdateApprovers()
+    /// <summary>
+    /// Handles backfilling approver fields for 'invoice request' items
+    /// based on recent Unit list changes.
+    /// </summary>
+    internal class InvoiceRequestDQ
     {
-      DateTime dateTime = DateTime.Today.AddDays(-3.0);
-      string str = "<View><Query><Where><Geq><FieldRef Name='Modified' /><Value Type='DateTime'>" + (dateTime.Year.ToString() + "-" + this.PadStr(dateTime.Month) + "-" + this.PadStr(dateTime.Day) + "T00:00:00Z") + "</Value></Geq></Where></Query></View>";
-      SPOList spoList1 = new SPOList();
-      spoList1.SPOUser = this.Me;
-      spoList1.Name = "Unit";
-      spoList1.Site = "seed";
-      spoList1.CAMLQuery = str;
-      SPOList spoList2 = spoList1;
-      Dictionary<string, ListItem> unitDictionary = new Dictionary<string, ListItem>();
-      spoList2.Build();
-      if ((uint) spoList2.ItemCollection.Count > 0U)
-      {
-        for (int index = 0; index < spoList2.ItemCollection.Count; ++index)
-          unitDictionary.Add((string) spoList2.ItemCollection[index]["Project_x0020_ID"], spoList2.ItemCollection[index]);
-        SPOList spoList3 = new SPOList();
-        spoList3.SPOUser = this.Me;
-        spoList3.Name = "invoice request";
-        spoList3.Site = "selfservice/invoicerequest";
-        spoList3.CAMLQuery = this.QueryBuilder(unitDictionary);
-        SPOList spoList4 = spoList3;
-        int num = 0;
-        spoList4.Build();
-        foreach (ListItem listItem1 in (ClientObjectCollection<ListItem>) spoList4.ItemCollection)
+        /// <summary>
+        /// Authenticated SharePoint user context for operations.
+        /// </summary>
+        public SPOUser Me { get; set; }
+
+        /// <summary>
+        /// Updates Invoice Request items modified in the last 3 days,
+        /// setting approvers from the Unit list lookup.
+        /// </summary>
+        /// <returns>True when complete; exceptions may bubble out.</returns>
+        public bool UpdateApprovers()
         {
-          ListItem listItem2 = unitDictionary[((FieldLookupValue) listItem1["Unit_x002f_Project_x003a_Project0"]).LookupValue];
-          listItem1["Main_x0020_approver"] = listItem2["Main_x0020_approver"];
-          listItem1["Optional_x0020_approver"] = listItem2["Optional_x0020_approver"];
-          listItem1["Financial_x0020_approver"] = listItem2["Financial_x0020_approver"];
-          listItem1.Update();
-          ++num;
-          if (num % 80 == 0)
-            spoList4.Ctx.ExecuteQuery();
+            // Calculate cutoff date (3 days ago at midnight UTC)
+            DateTime cutoff = DateTime.Today.AddDays(-3);
+            string cutoffIso = $"{cutoff:yyyy-MM-dd}T00:00:00Z";
+
+            // Build CAML to fetch Unit items modified since cutoff
+            string unitQuery =
+                "<View><Query><Where>"
+              + $"<Geq><FieldRef Name='Modified' /><Value Type='DateTime'>{cutoffIso}</Value></Geq>"
+              + "</Where></Query></View>";
+
+            // Load recent Unit list items into a dictionary by Project ID
+            var unitList = new SPOList
+            {
+                SPOUser = Me,
+                Name = "Unit",
+                Site = "seed",
+                CAMLQuery = unitQuery
+            };
+            unitList.Build();
+
+            var unitMap = new Dictionary<string, ListItem>();
+            foreach (ListItem unit in unitList.ItemCollection)
+            {
+                // Use Project_x0020_ID as key
+                string projectId = (string)unit["Project_x0020_ID"];
+                unitMap[projectId] = unit;
+            }
+
+            // If no recent units, nothing to update
+            if (unitMap.Count == 0) return true;
+
+            // Build CAML for invoice requests whose Unit lookup matches our keys
+            string invoiceQuery = QueryBuilder(unitMap);
+            var invoiceList = new SPOList
+            {
+                SPOUser = Me,
+                Name = "invoice request",
+                Site = "selfservice/invoicerequest",
+                CAMLQuery = invoiceQuery
+            };
+            invoiceList.Build();
+
+            int batchCount = 0;
+            // Iterate and copy approver fields from Unit to Invoice Request
+            foreach (ListItem inv in invoiceList.ItemCollection)
+            {
+                // Lookup matching Unit item
+                var lookup = (FieldLookupValue)inv["Unit_x002f_Project_x003a_Project0"];
+                ListItem unitItem = unitMap[lookup.LookupValue];
+
+                // Copy approvers
+                inv["Main_x0020_approver"] = unitItem["Main_x0020_approver"];
+                inv["Optional_x0020_approver"] = unitItem["Optional_x0020_approver"];
+                inv["Financial_x0020_approver"] = unitItem["Financial_x0020_approver"];
+                inv.Update();
+
+                // Execute in batches of 80 to avoid throttling
+                if (++batchCount % 80 == 0)
+                {
+                    invoiceList.Ctx.ExecuteQuery();
+                }
+            }
+
+            // Execute any remaining updates
+            Console.WriteLine("Executing last query");
+            invoiceList.Ctx.ExecuteQuery();
+            Console.WriteLine("Done executing last query");
+
+            return true;
         }
-        Console.WriteLine("Executing last query");
-        spoList4.Ctx.ExecuteQuery();
-        Console.WriteLine("Done Executing last query");
-      }
-      return true;
-    }
 
-    private string PadStr(int i)
-    {
-      return i < 10 ? "0" + (object) i : string.Concat((object) i);
-    }
+        /// <summary>
+        /// Pads single-digit numbers with leading zero.
+        /// </summary>
+        private string PadStr(int i)
+        {
+            return i < 10 ? "0" + i : i.ToString();
+        }
 
-    private string QueryBuilder(Dictionary<string, ListItem> unitDictionary)
-    {
-      bool flag = true;
-      string str = this.OrAppend("<View><Query><Where>", unitDictionary.Keys.Count);
-      foreach (string key in unitDictionary.Keys)
-      {
-        str = str + "<Eq><FieldRef Name='Unit_x002f_Project_x003a_Project0' /><Value Type='Text'>" + key + "</Value></Eq>";
-        if (!flag)
-          str += "</Or>";
-        flag = false;
-      }
-      return str + "</Where></Query></View>";
-    }
+        /// <summary>
+        /// Constructs a CAML query string that ORs Eq conditions
+        /// for each Unit key in the dictionary.
+        /// </summary>
+        private string QueryBuilder(Dictionary<string, ListItem> unitMap)
+        {
+            // Start the <Where> clause, prepending nested <Or> as needed
+            string xml = OrAppend("<View><Query><Where>", unitMap.Count);
+            bool first = true;
+            foreach (var key in unitMap.Keys)
+            {
+                // Add an Eq statement for each Project key
+                xml += $"<Eq><FieldRef Name='Unit_x002f_Project_x003a_Project0' />"
+                     + $"<Value Type='Text'>{key}</Value></Eq>";
+                if (!first) xml += "</Or>";
+                first = false;
+            }
+            xml += "</Where></Query></View>";
+            return xml;
+        }
 
-    private string OrAppend(string str, int size)
-    {
-      string str1;
-      if (size <= 1)
-        str1 = str;
-      else
-        str = str1 = this.OrAppend(str + "<Or>", size - 1);
-      return str1;
+        /// <summary>
+        /// Recursively appends <Or> tags for a CAML query
+        /// based on the number of clauses required.
+        /// </summary>
+        private string OrAppend(string xml, int count)
+        {
+            if (count <= 1)
+                return xml;
+            // Nest one <Or> and recurse for remaining count - 1
+            return OrAppend(xml + "<Or>", count - 1);
+        }
     }
-  }
 }
