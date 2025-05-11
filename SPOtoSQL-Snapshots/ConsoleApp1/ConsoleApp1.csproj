@@ -1,103 +1,108 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <!--Project was exported from assembly: C:\Users\KEVIN\Desktop\Visual Studio\SPtoSP\ConsoleApp1.exe-->
-  <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{2F127D05-3822-4C73-840C-0BF0D7EBBF8C}</ProjectGuid>
-    <OutputType>Exe</OutputType>
-    <AssemblyName>ConsoleApp1</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <ApplicationVersion>1.0.0.0</ApplicationVersion>
-    <FileAlignment>512</FileAlignment>
-    <RootNamespace>Bring</RootNamespace>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="Microsoft.Office.Client.Policy, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.Office.Client.Policy.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Office.Client.TranslationServices, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.Office.Client.TranslationServices.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Office.SharePoint.Tools, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.Office.SharePoint.Tools.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Online.SharePoint.Client.Tenant, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.Online.SharePoint.Client.Tenant.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.ProjectServer.Client, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.ProjectServer.Client.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.DocumentManagement, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.DocumentManagement.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.Publishing, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Publishing.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.Runtime, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Runtime.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.Runtime.Windows, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Runtime.Windows.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.Search, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Search.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.Search.Applications, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Search.Applications.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.Taxonomy, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Taxonomy.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.UserProfiles, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.UserProfiles.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.SharePoint.Client.WorkflowServices, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.WorkflowServices.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Configuration" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Data" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="SPODataQuality\RefreshSPOLists.cs" />
-    <Compile Include="Sqlserver\RefreshSQLLists.cs" />
-    <Compile Include="Sqlserver\SQLInteraction.cs" />
-    <Compile Include="Sharepoint\ActivitiesDQ.cs" />
-    <Compile Include="Sharepoint\GetallLists.cs" />
-    <Compile Include="Sharepoint\InvoiceRequestDQ.cs" />
-    <Compile Include="Sharepoint\Constants.cs" />
-    <Compile Include="Sharepoint\Context.cs" />
-    <Compile Include="Sharepoint\SPOList.cs" />
-    <Compile Include="Sharepoint\SPOUser.cs" />
-    <Compile Include="Sharepoint\TimesheetDQ.cs" />
-    <Compile Include="AssemblyInfo.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+	<!--Project was exported from assembly: C:\Users\KEVIN\Desktop\Visual Studio\SPtoSP\ConsoleApp1.exe-->
+	<PropertyGroup>
+		<Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+		<ProjectGuid>{2F127D05-3822-4C73-840C-0BF0D7EBBF8C}</ProjectGuid>
+		<OutputType>Exe</OutputType>
+		<AssemblyName>ConsoleApp1</AssemblyName>
+		<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+		<ApplicationVersion>1.0.0.0</ApplicationVersion>
+		<FileAlignment>512</FileAlignment>
+		<RootNamespace>Bring</RootNamespace>
+	</PropertyGroup>
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+		<PlatformTarget>AnyCPU</PlatformTarget>
+		<DebugSymbols>true</DebugSymbols>
+		<DebugType>full</DebugType>
+		<Optimize>false</Optimize>
+		<OutputPath>bin\Debug\</OutputPath>
+		<DefineConstants>DEBUG;TRACE</DefineConstants>
+		<ErrorReport>prompt</ErrorReport>
+		<WarningLevel>4</WarningLevel>
+	</PropertyGroup>
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+		<PlatformTarget>AnyCPU</PlatformTarget>
+		<DebugType>pdbonly</DebugType>
+		<Optimize>true</Optimize>
+		<OutputPath>bin\Release\</OutputPath>
+		<DefineConstants>TRACE</DefineConstants>
+		<ErrorReport>prompt</ErrorReport>
+		<WarningLevel>4</WarningLevel>
+	</PropertyGroup>
+	<ItemGroup>
+		<Reference Include="Microsoft.Office.Client.Policy, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.Office.Client.Policy.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.Office.Client.TranslationServices, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.Office.Client.TranslationServices.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.Office.SharePoint.Tools, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.Office.SharePoint.Tools.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.Online.SharePoint.Client.Tenant, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.Online.SharePoint.Client.Tenant.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.ProjectServer.Client, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.ProjectServer.Client.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.DocumentManagement, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.DocumentManagement.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.Publishing, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Publishing.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.Runtime, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Runtime.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.Runtime.Windows, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Runtime.Windows.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.Search, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Search.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.Search.Applications, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Search.Applications.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.Taxonomy, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.Taxonomy.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.UserProfiles, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.UserProfiles.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.SharePoint.Client.WorkflowServices, Version=16.1.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+			<HintPath>packages\Microsoft.SharePointOnline.CSOM.16.1.19814.12000\lib\net45\Microsoft.SharePoint.Client.WorkflowServices.dll</HintPath>
+		</Reference>
+		<Reference Include="System" />
+		<Reference Include="System.Configuration" />
+		<Reference Include="System.Core" />
+		<Reference Include="System.Data" />
+		<Reference Include="System.Xml" />
+	</ItemGroup>
+	<ItemGroup>
+		<Compile Include="SPODataQuality\RefreshSPOLists.cs" />
+		<Compile Include="Sqlserver\RefreshSQLLists.cs" />
+		<Compile Include="Sqlserver\SQLInteraction.cs" />
+		<Compile Include="Sharepoint\ActivitiesDQ.cs" />
+		<Compile Include="Sharepoint\GetallLists.cs" />
+		<Compile Include="Sharepoint\InvoiceRequestDQ.cs" />
+		<Compile Include="Sharepoint\Constants.cs" />
+		<Compile Include="Sharepoint\Context.cs" />
+		<Compile Include="Sharepoint\SPOList.cs" />
+		<Compile Include="Sharepoint\SPOUser.cs" />
+		<Compile Include="Sharepoint\TimesheetDQ.cs" />
+		<Compile Include="XmlConfig\ConfigHelper.cs" />
+		<Compile Include="AssemblyInfo.cs" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Include="packages.config" />
+		<None Include="XmlConfig\UserConfig.xml">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+	<Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

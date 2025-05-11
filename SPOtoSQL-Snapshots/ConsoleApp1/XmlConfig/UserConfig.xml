@@ -1,10 +1,9 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Configuration>
+﻿<Configuration>
 	<SharePoint>
 		<Username>Guilherme.sales@bringglobal.com</Username>
 		<Password>UtKid_3AV^r]H+</Password>
 	</SharePoint>
 	<SQL>
-		<ConnectionString>Server=10.11.30.20;Database=LAKEDB;User ID=SQL_USER;Password=SQL_PASSWORD;</ConnectionString>
+		<ConnectionString>Server=10.11.30.20;Database=LAKEDB;User ID=real_user;Password=real_pass;</ConnectionString>
 	</SQL>
 </Configuration>
