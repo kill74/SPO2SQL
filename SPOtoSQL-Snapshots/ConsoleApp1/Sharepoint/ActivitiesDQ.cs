@@ -1,34 +1,57 @@
-﻿// Decompiled with JetBrains decompiler
-// Type: Bring.Sharepoint.ActivitiesDQ
-// Assembly: ConsoleApp1, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
-// MVID: 2529ACA9-9F81-4C49-8E47-E8B02D261367
-// Assembly location: C:\Users\KEVIN\Desktop\Visual Studio\SPtoSP\ConsoleApp1.exe
-
-using Microsoft.SharePoint.Client;
+﻿using Microsoft.SharePoint.Client;
 
 namespace Bring.Sharepoint
 {
-  internal class ActivitiesDQ
-  {
-    public SPOUser Me { get; set; }
-
-    public bool UpdateIDs()
+    /// <summary>
+    /// Handles backfilling the '_OpportunityID' field on 'activities' items
+    /// when it is currently null, by copying the value from 'OpportunityID'.
+    /// </summary>
+    internal class ActivitiesDQ
     {
-      string str = "<View><Query><Where><IsNull><FieldRef Name ='_OpportunityID' /></IsNull></Where></Query></View>";
-      SPOList spoList1 = new SPOList();
-      spoList1.Name = "activities";
-      spoList1.Site = "wolf";
-      spoList1.SPOUser = this.Me;
-      spoList1.CAMLQuery = str;
-      SPOList spoList2 = spoList1;
-      spoList2.Build();
-      foreach (ListItem listItem in (ClientObjectCollection<ListItem>) spoList2.ItemCollection)
-      {
-        listItem["_OpportunityID"] = listItem["OpportunityID"];
-        listItem.Update();
-      }
-      spoList2.Ctx.ExecuteQuery();
-      return true;
+        /// <summary>
+        /// The current SharePoint user context, used for list operations.
+        /// </summary>
+        public SPOUser Me { get; set; }
+
+        /// <summary>
+        /// Queries the 'activities' list for items where '_OpportunityID' is null,
+        /// then updates each item's '_OpportunityID' field to match 'OpportunityID'.
+        /// </summary>
+        /// <returns>Always returns true if execution completes without exception.</returns>
+        public bool UpdateIDs()
+        {
+            // Define a CAML query to find items lacking the custom _OpportunityID field
+            string camlQuery =
+                "<View>"
+              + "<Query><Where><IsNull>"
+              + "<FieldRef Name='_OpportunityID' />"
+              + "</IsNull></Where></Query>"
+              + "</View>";
+
+            // Initialize the SPOList wrapper for the 'activities' list
+            var activitiesList = new SPOList
+            {
+                Name = "activities",
+                Site = "wolf",
+                SPOUser = this.Me,
+                CAMLQuery = camlQuery
+            };
+
+            // Retrieve matching items from SharePoint
+            activitiesList.Build();
+
+            // Iterate through each item, copying OpportunityID into _OpportunityID
+            foreach (ListItem item in activitiesList.ItemCollection)
+            {
+                // Copy the existing 'OpportunityID' value into the '_OpportunityID' field
+                item["_OpportunityID"] = item["OpportunityID"];
+                item.Update();
+            }
+
+            // Commit all pending updates to SharePoint in a single batch
+            activitiesList.Ctx.ExecuteQuery();
+
+            return true;
+        }
     }
-  }
 }

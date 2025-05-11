@@ -1,76 +1,140 @@
-﻿// Decompiled with JetBrains decompiler
-// Type: Bring.Sharepoint.TimesheetDQ
-// Assembly: ConsoleApp1, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
-// MVID: 2529ACA9-9F81-4C49-8E47-E8B02D261367
-// Assembly location: C:\Users\KEVIN\Desktop\Visual Studio\SPtoSP\ConsoleApp1.exe
-
-using Microsoft.SharePoint.Client;
+﻿using Microsoft.SharePoint.Client;
 using System;
 
 namespace Bring.Sharepoint
 {
-  internal class TimesheetDQ
-  {
-    public SPOUser Me { get; set; }
-
-    public bool UpdateApprovers()
+    /// <summary>
+    /// Handles backfilling approver fields in the 'Timesheet' list when missing.
+    /// Queries related lists to determine the correct approvers based on unit or structure.
+    /// </summary>
+    internal class TimesheetDQ
     {
-      string str = "<View><Query><Where><IsNull><FieldRef Name ='Main_x0020_approver' /></IsNull></Where></Query></View>";
-      SPOList spoList1 = new SPOList();
-      spoList1.Name = "Timesheet";
-      spoList1.Site = "selfservice/timesheet";
-      spoList1.SPOUser = this.Me;
-      spoList1.CAMLQuery = str;
-      SPOList spoList2 = spoList1;
-      spoList2.Build();
-      foreach (ListItem listItem in (ClientObjectCollection<ListItem>) spoList2.ItemCollection)
-      {
-        try
+        /// <summary>
+        /// The authenticated SharePoint user context used for list operations.
+        /// </summary>
+        public SPOUser Me { get; set; }
+
+        /// <summary>
+        /// Updates each Timesheet item missing a Main approver by copying from Unit or structure logic.
+        /// </summary>
+        /// <returns>True if processing completes without unhandled exceptions.</returns>
+        public bool UpdateApprovers()
         {
-          ListItem unitItem = this.GetUnitItem(listItem);
-          if (unitItem != null && unitItem["Main_x0020_approver"] != null)
-          {
-            listItem["Main_x0020_approver"] = unitItem["Main_x0020_approver"];
-            listItem["Optional_x0020_approver"] = unitItem["Optional_x0020_approver"];
-          }
-          else
-            listItem["Main_x0020_approver"] = (object) this.GetStructureApprover(listItem);
-          listItem.Update();
+            // CAML to select timesheet items where Main_approver is null
+            string camlQuery =
+                "<View>"
+              + "<Query><Where><IsNull>"
+              + "<FieldRef Name='Main_x0020_approver' />"
+              + "</IsNull></Where></Query>"
+              + "</View>";
+
+            // Initialize the Timesheet list wrapper
+            var timesheetList = new SPOList
+            {
+                Name = "Timesheet",
+                Site = "selfservice/timesheet",
+                SPOUser = this.Me,
+                CAMLQuery = camlQuery
+            };
+
+            // Retrieve matching items
+            timesheetList.Build();
+
+            // Iterate through each item to assign approvers
+            foreach (ListItem item in timesheetList.ItemCollection)
+            {
+                try
+                {
+                    // Try retrieving the unit-specific approver record
+                    var unitRecord = GetUnitItem(item);
+                    if (unitRecord != null && unitRecord["Main_x0020_approver"] != null)
+                    {
+                        // Copy both main and optional approvers from Unit list
+                        item["Main_x0020_approver"] = unitRecord["Main_x0020_approver"];
+                        item["Optional_x0020_approver"] = unitRecord["Optional_x0020_approver"];
+                    }
+                    else
+                    {
+                        // Fall back to organization structure approver
+                        item["Main_x0020_approver"] = GetStructureApprover(item);
+                    }
+
+                    item.Update(); // Queue update for this item
+                }
+                catch (Exception ex)
+                {
+                    // Log any exceptions but continue processing
+                    Console.WriteLine($"Error processing item ID {item.Id}: {ex.Message}");
+                }
+            }
+
+            // Execute all queued updates in one batch
+            timesheetList.Ctx.ExecuteQuery();
+            return true;
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Retrieves a Unit list record corresponding to the item's Unit:Project ID, if active.
+        /// </summary>
+        /// <param name="item">The timesheet ListItem being processed.</param>
+        /// <returns>The first matching Unit ListItem or null if none found.</returns>
+        private ListItem GetUnitItem(ListItem item)
         {
-          Console.WriteLine(ex.Message);
-          Console.WriteLine("Item ID: " + (object) listItem.Id);
+            // Build CAML to find active unit by project ID lookup value
+            string projectId = ((FieldLookupValue)item["Unit_x003a_Project_x0020_ID"]).LookupValue;
+            string camlUnitQuery =
+                "<View>"
+              + "<Query><Where><And>"
+              + "<Eq><FieldRef Name='Project_x0020_ID' /><Value Type='Text'>" + projectId + "</Value></Eq>"
+              + "<Eq><FieldRef Name='Active' /><Value Type='Text'>Yes</Value></Eq>"
+              + "</And></Where></Query>"
+              + "</View>";
+
+            var unitList = new SPOList
+            {
+                Name = "Unit",
+                Site = "seed",
+                SPOUser = this.Me,
+                CAMLQuery = camlUnitQuery
+            };
+
+            unitList.Build();
+            return unitList.ItemCollection.Count > 0 ? unitList.ItemCollection[0] : null;
         }
-      }
-      spoList2.Ctx.ExecuteQuery();
-      return true;
-    }
 
-    private ListItem GetUnitItem(ListItem item)
-    {
-      SPOList spoList1 = new SPOList();
-      spoList1.Name = "Unit";
-      spoList1.Site = "seed";
-      spoList1.SPOUser = this.Me;
-      SPOList spoList2 = spoList1;
-      string str = "<View><Query><Where><And><Eq><FieldRef Name ='Project_x0020_ID' /><Value Type='Text'>" + ((FieldLookupValue) item["Unit_x003a_Project_x0020_ID"]).LookupValue + "</Value></Eq><Eq><FieldRef Name ='Active' /><Value Type='Text'>Yes</Value></Eq></And></Where></Query></View>";
-      spoList2.CAMLQuery = str;
-      spoList2.Build();
-      return spoList2.ItemCollection.Count != 0 ? spoList2.ItemCollection[0] : (ListItem) null;
-    }
+        /// <summary>
+        /// Looks up the approver based on the organizational structure for a given resource.
+        /// </summary>
+        /// <param name="item">The timesheet ListItem being processed.</param>
+        /// <returns>A FieldUserValue representing the structure-based approver, or null.</returns>
+        private FieldUserValue GetStructureApprover(ListItem item)
+        {
+            // Build CAML to find person by Resource lookup ID
+            int resourceId = ((FieldLookupValue)item["Resource"]).LookupId;
+            string camlPersonQuery =
+                "<View>"
+              + "<Query><Where>"
+              + "<Eq><FieldRef Name='Display_x0020_Name' LookupId='TRUE'/>"
+              + "<Value Type='Integer'>" + resourceId + "</Value></Eq>"
+              + "</Where></Query>"
+              + "</View>";
 
-    private FieldUserValue GetStructureApprover(ListItem item)
-    {
-      SPOList spoList1 = new SPOList();
-      spoList1.Name = "HR Database";
-      spoList1.Site = "people";
-      spoList1.SPOUser = this.Me;
-      SPOList spoList2 = spoList1;
-      string str = "<View><Query><Where><Eq><FieldRef Name ='Display_x0020_Name' LookupId='TRUE'/><Value Type='Integer'>" + (object) ((FieldLookupValue) item["Resource"]).LookupId + "</Value></Eq></Where></Query></View>";
-      spoList2.CAMLQuery = str;
-      spoList2.Build();
-      return spoList2.ItemCollection.Count != 0 ? (FieldUserValue) spoList2.ItemCollection[0]["Approver1"] : (FieldUserValue) null;
+            var hrList = new SPOList
+            {
+                Name = "HR Database",
+                Site = "people",
+                SPOUser = this.Me,
+                CAMLQuery = camlPersonQuery
+            };
+
+            hrList.Build();
+            if (hrList.ItemCollection.Count > 0)
+            {
+                // Return the primary approver field from HR record
+                return (FieldUserValue)hrList.ItemCollection[0]["Approver1"];
+            }
+
+            return null; // No structure approver found
+        }
     }
-  }
 }

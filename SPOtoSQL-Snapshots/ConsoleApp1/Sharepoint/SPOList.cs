@@ -243,7 +243,7 @@ namespace Bring.Sharepoint
         }
       }
     }
-
+            
     public ListItem AddItem()
     {
       ListItem listItem = this.list.AddItem(new ListItemCreationInformation());
