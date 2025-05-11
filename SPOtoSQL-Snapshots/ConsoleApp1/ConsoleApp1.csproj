@@ -90,7 +90,6 @@
 		<Compile Include="Sharepoint\ActivitiesDQ.cs" />
 		<Compile Include="Sharepoint\GetallLists.cs" />
 		<Compile Include="Sharepoint\InvoiceRequestDQ.cs" />
-		<Compile Include="Sharepoint\Constants.cs" />
 		<Compile Include="Sharepoint\Context.cs" />
 		<Compile Include="Sharepoint\SPOList.cs" />
 		<Compile Include="Sharepoint\SPOUser.cs" />
