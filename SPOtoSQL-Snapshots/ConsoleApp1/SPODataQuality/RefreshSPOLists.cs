@@ -125,7 +125,7 @@ namespace Bring.SPODataQuality
                     }
                 }
             }
-            // If the connection is not working, catch the exception and print the error message
+
             catch (SqlException ex)
             {
                 Console.WriteLine($"SQL connection error: {ex.Message}");
