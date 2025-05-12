@@ -10,11 +10,12 @@ namespace Bring.Sqlserver
         // Method to initiate the update process from SharePoint to SQL Server
         public static void SPOtoSQLUpdate(bool daily)
         {
-            Console.WriteLine("Starting SPO to SQL update. Daily: " + daily);
+            Console.WriteLine("SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
 
             // Retrieve SharePoint credentials from the configuration file
             var (username, password) = ConfigurationReader.GetSharePointCredentials();
             // Create a SharePoint user object with the retrieved credentials
+            Console.WriteLine($"SPOtoSQLUpdate: {username} {password}");
             SPOUser user = new SPOUser(username, password);
 
             // Iterate through all keys in the AppSettings section of the configuration file
@@ -23,12 +24,12 @@ namespace Bring.Sqlserver
             {
                 string listName = allKey; // The key is the SharePoint list name
                 string ctxURL = ConfigurationManager.AppSettings[allKey]; // The value is the SharePoint site URL
-                Console.WriteLine($"Processing list: {listName} with URL: {ctxURL}");
+                Console.WriteLine($"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
                 // Call the method to refresh the SQL data for this specific list
                 RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
             }
 
-            Console.WriteLine("SPO to SQL update completed.");
+            Console.WriteLine("SPOtoSQLUpdate: SPO to SQL update completed.");
         }
 
         // Method to handle the update process for a specific SharePoint list to SQL Server
@@ -36,7 +37,7 @@ namespace Bring.Sqlserver
         {
             try
             {
-                Console.WriteLine($"Initializing SPO list for: {listName}");
+                Console.WriteLine($"RefreshListsSQL: Initializing SPO list for: {listName}");   
 
                 // Create a new SPOList object to represent the SharePoint list
                 SPOList spoList = new SPOList();
@@ -44,7 +45,7 @@ namespace Bring.Sqlserver
                 spoList.SPOUser = user; // Assign the SharePoint user credentials
                 spoList.Name = listName; // Set the name of the SharePoint list
 
-                Console.WriteLine("SPOList initialized:");
+                Console.WriteLine("RefreshListsSQL: SPOList initialized:");
                 Console.WriteLine($"  Site: {spoList.Site}");
                 Console.WriteLine($"  Name: {spoList.Name}");
 
@@ -54,30 +55,30 @@ namespace Bring.Sqlserver
                     List = spoList // Assign the SharePoint list to the SQLInteraction object
                 };
 
-                Console.WriteLine("Building SQL interaction...");
+                Console.WriteLine("RefreshListsSQL: Building SQL interaction...");
                 // Build the SQL interaction, likely setting up the SQL connection and table structure
                 sqlInteraction.Build();
 
                 // Perform the appropriate update based on the 'daily' flag
                 if (daily)
                 {
-                    Console.WriteLine("Performing daily update...");
+                    Console.WriteLine("RefreshListsSQL: Performing daily update...");
                     // Execute a daily update, possibly deleting and re-inserting all data
                     sqlInteraction.DailyUpdate();
                 }
                 else
                 {
-                    Console.WriteLine("Performing current time update...");
+                    Console.WriteLine("RefreshListsSQL: Performing current time update...");
                     // Execute an update based on the current timestamp
                     sqlInteraction.CurrentTimeUpdate();
                 }
 
-                Console.WriteLine($"Update for list '{listName}' completed.");
+                Console.WriteLine($"RefreshListsSQL: Update for list '{listName}' completed.");
             }
             catch (Exception ex)
             {
                 // Handle and log any exceptions that occur during the update process
-                Console.WriteLine($"Error updating list '{listName}': {ex.Message}");
+                Console.WriteLine($"RefreshListsSQL: Error updating list '{listName}': {ex.Message}");
             }
         }
     }

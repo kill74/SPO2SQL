@@ -36,7 +36,7 @@ namespace Bring.Sharepoint
             if (password == null)
                 throw new ArgumentNullException(nameof(password), "Password cannot be null.");
 
-            Console.WriteLine($"Initializing SPOUser for: {username}");
+            Console.WriteLine($"SPOUser: Initializing SPOUser for: {username}");
 
             this.Username = username;
 

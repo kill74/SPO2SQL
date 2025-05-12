@@ -24,17 +24,26 @@ namespace Bring.Sharepoint
 
     public void Build()
     {
-      if (this.web == null || this.Ctx.Site.Context.Url != "https://bringglobal.sharepoint.com/" + this.Site)
-        this.BuildContext();
+       Console.WriteLine("SPOList.Build: Building list: " + this.Name + " - site: " + this.Site);
+       if (this.web == null || this.Ctx.Site.Context.Url != "https://bringglobal.sharepoint.com/" + this.Site)
+       {
+           Console.WriteLine("SPOList.Build: Vou para BuildContext");
+           this.BuildContext();
+           Console.WriteLine("SPOList.Build: Vim de BuildContext");
+        }
       CamlQuery camlQuery;
       if (this.CAMLQuery == null)
       {
-        camlQuery = CamlQuery.CreateAllItemsQuery();
+          Console.WriteLine("SPOList.Build: Vou para CamlQuery 1.");
+          camlQuery = CamlQuery.CreateAllItemsQuery();
+          Console.WriteLine("SPOList.Build: Vim de CamlQuery 1.");
       }
       else
       {
-        camlQuery = new CamlQuery();
-        camlQuery.ViewXml = this.CAMLQuery;
+          Console.WriteLine("SPOList.Build: Vou para CamlQuery 2.");
+          camlQuery = new CamlQuery();
+          camlQuery.ViewXml = this.CAMLQuery;
+          Console.WriteLine("SPOList.Build: Vim de CamlQuery 2.");
       }
       CamlQuery query = camlQuery;
       this.list = this.web.Lists.GetByTitle(this.Name);
@@ -43,7 +52,17 @@ namespace Bring.Sharepoint
       this.Ctx.Load<List>(this.list, Array.Empty<Expression<Func<List, object>>>());
       this.Ctx.Load<ListItemCollection>(this.ItemCollection, Array.Empty<Expression<Func<ListItemCollection, object>>>());
       this.Ctx.Load<FieldCollection>(this.Fields, Array.Empty<Expression<Func<FieldCollection, object>>>());
-      this.Ctx.ExecuteQuery();
+      Console.WriteLine("SPOList.Build: Vou para ExecuteQuery");
+      try
+      {
+          this.Ctx.ExecuteQuery();
+      }
+      catch 
+      {
+          System.Console.WriteLine("SPOList.Build: O executeQuery deu erro");
+          throw;
+      }
+      Console.WriteLine("SPOList.Build: Vim de ExecuteQuery");
     }
 
     public void Update()

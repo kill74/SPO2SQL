@@ -38,14 +38,14 @@ namespace Bring.Sqlserver
         /// </summary>
         public void Build()
         {
-            Console.WriteLine("Starting SQL build for list: " + this.List.Name);
+            Console.WriteLine("SQLInteraction.Build: Starting SQL build for list: " + this.List.Name);
 
             // Convert list name to PascalCase to use as the SQL table name
             this.TableName = this.ToPascalCase(this.List.Name, false);
 
             // Open database connection and begin transaction
             this.Connection = new SqlConnection(ConfigurationReader.GetSqlConnectionString());
-            Console.WriteLine("Opening SQL connection...");
+            Console.WriteLine("SQLInteraction.Build: Opening SQL connection...");
             this.Connection.Open();
 
             this.Command = this.Connection.CreateCommand();
@@ -57,23 +57,23 @@ namespace Bring.Sqlserver
             this.CurrentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
 
             // Load SharePoint list metadata
-            Console.WriteLine("Building SPO list...");
+            Console.WriteLine("SQLInteraction.Build: Building SPO list...");
             this.List.Build();
 
             // Build dictionary of columns based on fields
             this.FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
-            Console.WriteLine("Building dictionary of fields...");
+            Console.WriteLine("SQLInteraction.Build: Building dictionary of fields...");
             this.BuildDictionary();
 
             // Create or update table schema
             if (!this.TableExists(this.TableName))
             {
-                Console.WriteLine("Table doesn't exist. Creating table: " + this.TableName);
+                Console.WriteLine("SQLInteraction.Build: Table doesn't exist. Creating table: " + this.TableName);
                 this.CreateTable();
             }
             else
             {
-                Console.WriteLine("Table exists. Updating table design...");
+                Console.WriteLine("SQLInteraction.Build: Table exists. Updating table design...");
                 this.UpdateTableDesign();
             }
         }
@@ -86,7 +86,7 @@ namespace Bring.Sqlserver
         {
             try
             {
-                Console.WriteLine("Performing daily update...");
+                Console.WriteLine("SQLInteraction.DailyUpdate:  Performing daily update...");
 
                 // Remove previous snapshot marker rows
                 this.Command.CommandText = "DELETE FROM [" + this.TableName + "] WHERE Snapshot = '2100-01-01 00:00:00.000'";
@@ -99,11 +99,11 @@ namespace Bring.Sqlserver
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Daily update failed: " + ex.Message);
+                Console.WriteLine("SQLInteraction.DailyUpdate:  Daily update failed: " + ex.Message);
                 this.Transaction.Rollback();
             }
 
-            Console.WriteLine("Daily Update done for: " + this.TableName);
+            Console.WriteLine("SQLInteraction.DailyUpdate:  Daily Update done for: " + this.TableName);
         }
 
         /// <summary>

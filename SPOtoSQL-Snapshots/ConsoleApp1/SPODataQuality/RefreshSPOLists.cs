@@ -22,38 +22,41 @@ namespace Bring.SPODataQuality
 
                 // Test SQL connection before proceeding
                 TestSQLConnection();
+                Console.WriteLine("DEBUG: Main: SQL connection test completed");
 
                 // Retrieve SharePoint credentials (username and password) from a configuration source
                 var (username, password) = ConfigurationReader.GetSharePointCredentials();
                 SPOUser spoUser = new SPOUser(username, password); // Create a SharePoint user object
-                Console.WriteLine("DEBUG: SPOUser created"); // When Username and Password are filled correctly, this line will be printed
+                Console.WriteLine("DEBUG: Main: SPOUser created"); // When Username and Password are filled correctly, this line will be printed
 
                 // Initialize two SharePoint list objects and assign the user credentials to them
                 var list1 = new SPOList();
                 list1.SPOUser = spoUser;
-                Console.WriteLine("DEBUG: First SPOList configured");
+                Console.WriteLine("DEBUG: Main: First SPOList configured");
 
                 var list2 = new SPOList();
                 list2.SPOUser = spoUser;
-                Console.WriteLine("DEBUG: Second SPOList configured");
+                Console.WriteLine("DEBUG: Main: Second SPOList configured");
 
                 // Check if command-line arguments are provided
-                if ((uint)args.Length > 0U)
+                // if ((uint)args.Length > 0U)
+                if (true)
                 {
-                    string lower = args[0].ToLower(); // Convert the first argument to lowercase
-                    Console.WriteLine("DEBUG: Received argument - " + lower);
+                    // string lower = args[0].ToLower(); // Convert the first argument to lowercase
+                    string lower = "daily"; 
+                    Console.WriteLine("DEBUG: Main: Received argument - " + lower);
 
                     // Decide which update to perform based on the argument
                     if (lower == "daily")
                     {
                         // Perform a daily update from SharePoint to SQL Server
-                        Console.WriteLine("DEBUG: Executing daily");
+                        Console.WriteLine("DEBUG: Main: Executing daily");
                         RefreshSQLLists.SPOtoSQLUpdate(true);
                     }
                     else if (lower == "monthly")
                     {
                         // Perform a monthly update from SharePoint to SQL Server
-                        Console.WriteLine("DEBUG: Executing monthly");
+                        Console.WriteLine("DEBUG: Main: Executing monthly");
                         RefreshSQLLists.SPOtoSQLUpdate(false);
                     }
                     else
@@ -132,6 +135,7 @@ namespace Bring.SPODataQuality
                 Console.WriteLine($"Error number: {ex.Number}");
                 Console.WriteLine($"State: {ex.State}");
                 Console.WriteLine($"Procedure: {ex.Procedure}");
+                Console.WriteLine("The Execution is stoping.");
                 throw; // Re-throw to stop execution
             }
             catch (Exception ex)
