@@ -21,8 +21,10 @@ namespace Bring.SPODataQuality
 
                 // Retrieve SharePoint credentials (username and password) from a configuration source
                 var (username, password) = ConfigurationReader.GetSharePointCredentials();
+                Console.WriteLine($"Testing Conection with the username: {username}"); // Debug
+                Console.WriteLine($"Testing Conection with the password: {password}"); // Debug
                 SPOUser spoUser = new SPOUser(username, password); // Create a SharePoint user object
-                Console.WriteLine("DEBUG: SPOUser criado");
+                Console.WriteLine("DEBUG: SPOUser criado"); // When Username and Password are filled correctly, this line will be printed
 
                 // Initialize two SharePoint list objects and assign the user credentials to them
                 var list1 = new SPOList();
