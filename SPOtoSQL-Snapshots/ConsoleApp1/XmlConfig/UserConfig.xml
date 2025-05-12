@@ -4,6 +4,6 @@
 		<Password>UtKid_3AV^r]H+</Password>
 	</SharePoint>
 	<SQL>
-		<ConnectionString>Server=10.11.30.20;Database=LAKEDB;User ID=guilherme.sales;Password=fCyj765ERtg%3"!;</ConnectionString>
+		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=guilherme.sales;Password=fCyj765ERtg%3"!;</ConnectionString>
 	</SQL>
 </Configuration>
