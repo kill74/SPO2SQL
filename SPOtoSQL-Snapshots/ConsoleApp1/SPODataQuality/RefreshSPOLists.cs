@@ -39,11 +39,9 @@ namespace Bring.SPODataQuality
                 Console.WriteLine("DEBUG: Main: Second SPOList configured");
 
                 // Check if command-line arguments are provided
-                // if ((uint)args.Length > 0U)
-                if (true)
+                if ((uint)args.Length > 0U)
                 {
-                    // string lower = args[0].ToLower(); // Convert the first argument to lowercase
-                    string lower = "daily"; 
+                    string lower = args[0].ToLower(); // Convert the first argument to lowercase
                     Console.WriteLine("DEBUG: Main: Received argument - " + lower);
 
                     // Decide which update to perform based on the argument
