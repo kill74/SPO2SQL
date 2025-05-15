@@ -6,4 +6,30 @@
 	<SQL>
 		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=guilherme.sales;Password=fCyj765ERtg%3"!;</ConnectionString>
 	</SQL>
+	<ReplicationConfiguration>
+		<GlobalIgnoreColumns>
+			<Column>ColumnName_1</Column>
+			<!-- … -->
+			<Column>ColumnName_n</Column>
+		</GlobalIgnoreColumns>
+		<SharePointLists>
+			<List>
+				<SiteUrl>/sites/yoursite</SiteUrl>
+				<ListTitle>Sharepoint_List_Name</ListTitle>
+				<SqlTable>SQL_table_name</SqlTable>
+				<AutoAddNewColumns>true</AutoAddNewColumns>
+				<Disabled>true_or_false</Disabled>
+				<ColumnMappings>
+					<Mapping>
+						<SharepointColumn>Sharepoint_column_name</SharepointColumn>
+						<SqlColumn>SQL_column_name</SqlColumn>
+						<SqlDataType>NVARCHAR(255)</SqlDataType>
+						<IgnoreColumn>true_or_false</IgnoreColumn>
+					</Mapping>
+					<!-- Adicione mais <Mapping> conforme necessário -->
+				</ColumnMappings>
+			</List>
+			<!-- Adicione mais <List> conforme necessário -->
+		</SharePointLists>
+	</ReplicationConfiguration>
 </Configuration>
