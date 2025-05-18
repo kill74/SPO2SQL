@@ -15,21 +15,12 @@ namespace Bring.Sqlserver
     /// </summary>
     internal class SQLInteraction
     {
-        // SQL connection, command and transaction objects
         public SqlConnection Connection { get; set; }
         public SqlCommand Command { get; set; }
         public SqlTransaction Transaction { get; set; }
-
-        // SharePoint list being processed
         public SPOList List { get; set; }
-
-        // Name of the SQL table corresponding to the list
         public string TableName { get; set; }
-
-        // Mapping of SQL column names to SharePoint Field definitions
         public Dictionary<string, Field> FNDictionary { get; set; }
-
-        // Timestamp for the current operation
         public string CurrentTime { get; set; }
 
         /// <summary>
@@ -38,108 +29,200 @@ namespace Bring.Sqlserver
         /// </summary>
         public void Build()
         {
-            Console.WriteLine("SQLInteraction.Build: Starting SQL build for list: " + this.List.Name);
+            Console.WriteLine("SQLInteraction.Build: Starting SQL build for list: " + (this.List?.Name ?? "null"));
 
-            // Convert list name to PascalCase to use as the SQL table name
-            this.TableName = this.ToPascalCase(this.List.Name, false);
-
-            // Open database connection and begin transaction
-            this.Connection = new SqlConnection(ConfigurationReader.GetSqlConnectionString());
-            Console.WriteLine("SQLInteraction.Build: Opening SQL connection...");
-            this.Connection.Open();
-
-            this.Command = this.Connection.CreateCommand();
-            this.Transaction = this.Connection.BeginTransaction(this.TableName + " TXN.");
-            this.Command.Connection = this.Connection;
-            this.Command.Transaction = this.Transaction;
-
-            // Capture current timestamp
-            this.CurrentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-
-            // Load SharePoint list metadata
-            Console.WriteLine("SQLInteraction.Build: Building SPO list...");
-            this.List.Build();
-
-            // Build dictionary of columns based on fields
-            this.FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
-            Console.WriteLine("SQLInteraction.Build: Building dictionary of fields...");
-            this.BuildDictionary();
-
-            // Create or update table schema
-            if (!this.TableExists(this.TableName))
+            try
             {
-                Console.WriteLine("SQLInteraction.Build: Table doesn't exist. Creating table: " + this.TableName);
-                this.CreateTable();
+                this.TableName = this.ToPascalCase(this.List.Name, false);
+
+                try
+                {
+                    this.Connection = new SqlConnection(ConfigurationReader.GetSqlConnectionString());
+                    Console.WriteLine("SQLInteraction.Build: Opening SQL connection...");
+                    this.Connection.Open();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.Build: ERROR - Failed to open SQL connection.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    throw;
+                }
+
+                this.Command = this.Connection.CreateCommand();
+                this.Transaction = this.Connection.BeginTransaction(this.TableName + " TXN.");
+                this.Command.Connection = this.Connection;
+                this.Command.Transaction = this.Transaction;
+
+                this.CurrentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+
+                try
+                {
+                    Console.WriteLine("SQLInteraction.Build: Building SPO list...");
+                    this.List.Build();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.Build: ERROR - Failed to build SharePoint list.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    throw;
+                }
+
+                this.FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
+                Console.WriteLine("SQLInteraction.Build: Building dictionary of fields...");
+                try
+                {
+                    this.BuildDictionary();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.Build: ERROR - Failed to build field dictionary.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    throw;
+                }
+
+                try
+                {
+                    if (!this.TableExists(this.TableName))
+                    {
+                        Console.WriteLine("SQLInteraction.Build: Table doesn't exist. Creating table: " + this.TableName);
+                        this.CreateTable();
+                    }
+                    else
+                    {
+                        Console.WriteLine("SQLInteraction.Build: Table exists. Updating table design...");
+                        this.UpdateTableDesign();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.Build: ERROR - Failed during table creation or update.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    throw;
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Console.WriteLine("SQLInteraction.Build: Table exists. Updating table design...");
-                this.UpdateTableDesign();
+                Console.WriteLine("SQLInteraction.Build: FATAL ERROR - Build process failed.");
+                Console.WriteLine("Exception: " + ex.Message);
+                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                throw;
             }
         }
 
-        /// <summary>
-        /// Performs a daily data refresh by deleting placeholder rows,
-        /// transferring new data, and updating metadata.
-        /// </summary>
         public void DailyUpdate()
         {
             try
             {
-                Console.WriteLine("SQLInteraction.DailyUpdate:  Performing daily update...");
+                Console.WriteLine("SQLInteraction.DailyUpdate: Performing daily update...");
 
-                // Remove previous snapshot marker rows
-                this.Command.CommandText = "DELETE FROM [" + this.TableName + "] WHERE Snapshot = '2100-01-01 00:00:00.000'";
-                this.Command.ExecuteNonQuery();
+                try
+                {
+                    this.Command.CommandText = "DELETE FROM [" + this.TableName + "] WHERE Snapshot = '2100-01-01 00:00:00.000'";
+                    this.Command.ExecuteNonQuery();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.DailyUpdate: ERROR - Failed to delete previous snapshot marker rows.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
 
-                // Transfer new rows with far-future snapshot marker
-                this.TransferData("2100-01-01 00:00:00.000");
-                this.UpdateMetadata();
-                this.Transaction.Commit();
+                try
+                {
+                    this.TransferData("2100-01-01 00:00:00.000");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.DailyUpdate: ERROR - Failed to transfer data.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
+
+                try
+                {
+                    this.UpdateMetadata();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.DailyUpdate: ERROR - Failed to update metadata.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
+
+                try
+                {
+                    this.Transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.DailyUpdate: ERROR - Failed to commit transaction.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("SQLInteraction.DailyUpdate:  Daily update failed: " + ex.Message);
-                this.Transaction.Rollback();
+                Console.WriteLine("SQLInteraction.DailyUpdate: FATAL ERROR - Daily update failed: " + ex.Message);
+                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                try { this.Transaction?.Rollback(); } catch { }
             }
 
-            Console.WriteLine("SQLInteraction.DailyUpdate:  Daily Update done for: " + this.TableName);
+            Console.WriteLine("SQLInteraction.DailyUpdate: Daily Update done for: " + this.TableName);
         }
 
-        /// <summary>
-        /// Appends only the most recent data snapshot and commits it immediately.
-        /// </summary>
         public void CurrentTimeUpdate()
         {
             try
             {
-                Console.WriteLine("Performing current-time update...");
-                this.TransferData(this.CurrentTime);
-                this.UpdateMetadata();
-                this.Transaction.Commit();
+                Console.WriteLine("SQLInteraction.CurrentTimeUpdate: Performing current-time update...");
+                try
+                {
+                    this.TransferData(this.CurrentTime);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.CurrentTimeUpdate: ERROR - Failed to transfer data.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
+
+                try
+                {
+                    this.UpdateMetadata();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.CurrentTimeUpdate: ERROR - Failed to update metadata.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
+
+                try
+                {
+                    this.Transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("SQLInteraction.CurrentTimeUpdate: ERROR - Failed to commit transaction.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Current time update failed: " + ex.Message);
-                this.Transaction.Rollback();
+                Console.WriteLine("SQLInteraction.CurrentTimeUpdate: FATAL ERROR - Current time update failed: " + ex.Message);
+                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                try { this.Transaction?.Rollback(); } catch { }
             }
 
             Console.WriteLine(this.CurrentTime + " Update done for: " + this.TableName);
         }
 
-        /// <summary>
-        /// Inserts all items from the SharePoint list into the SQL table
-        /// using the provided snapshot date.
-        /// </summary>
         private void TransferData(string snapDate)
         {
-            Console.WriteLine("Transferring data for snapshot: " + snapDate);
+            Console.WriteLine("SQLInteraction.TransferData: Transferring data for snapshot: " + snapDate);
             StringBuilder stringBuilder = new StringBuilder();
             string sqlColNames = this.GetSQLColNames();
 
             foreach (ListItem listItem in this.List.ItemCollection)
             {
-                // Build INSERT statement
                 stringBuilder.Clear();
                 stringBuilder.AppendLine("INSERT INTO [" + this.TableName + "] " + sqlColNames);
                 stringBuilder.Append("VALUES ('" + snapDate + "', ");
@@ -147,7 +230,6 @@ namespace Bring.Sqlserver
                 foreach (Field field in this.FNDictionary.Values)
                 {
                     object obj = listItem[field.InternalName];
-                    // Handle different field types appropriately
                     if (obj != null)
                     {
                         if (obj is FieldLookupValue lookup)
@@ -174,7 +256,6 @@ namespace Bring.Sqlserver
                         }
                         else
                         {
-                            // Escape single quotes for text fields
                             if (obj is string s) obj = s.Replace("'", "''");
                             stringBuilder.Append("'" + obj + "', ");
                         }
@@ -183,7 +264,6 @@ namespace Bring.Sqlserver
                         stringBuilder.Append("NULL, ");
                 }
 
-                // Remove trailing comma and execute
                 stringBuilder.Remove(stringBuilder.Length - 2, 2);
                 stringBuilder.Append(")");
                 this.Command.CommandText = stringBuilder.ToString();
@@ -194,29 +274,32 @@ namespace Bring.Sqlserver
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("Couldn't insert values: " + ex.Message);
+                    Console.WriteLine("SQLInteraction.TransferData: ERROR - Couldn't insert values: " + ex.Message);
                     Console.WriteLine("INSERT STATEMENT: " + stringBuilder.ToString());
                 }
             }
         }
 
-        /// <summary>
-        /// Checks if the SQL table already exists in the database.
-        /// </summary>
         private bool TableExists(string listName)
         {
-            this.Command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '" + listName + "'";
-            bool exists = (int)this.Command.ExecuteScalar() != 0;
-            Console.WriteLine("Table " + listName + " exists: " + exists);
-            return exists;
+            try
+            {
+                this.Command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '" + listName + "'";
+                bool exists = (int)this.Command.ExecuteScalar() != 0;
+                Console.WriteLine("SQLInteraction.TableExists: Table " + listName + " exists: " + exists);
+                return exists;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("SQLInteraction.TableExists: ERROR - Failed to check if table exists.");
+                Console.WriteLine("Exception: " + ex.Message);
+                throw;
+            }
         }
 
-        /// <summary>
-        /// Creates a new SQL table based on the fields dictionary.
-        /// </summary>
         private void CreateTable()
         {
-            Console.WriteLine("Creating new table: " + this.TableName);
+            Console.WriteLine("SQLInteraction.CreateTable: Creating new table: " + this.TableName);
             StringBuilder stringBuilder = new StringBuilder("CREATE TABLE [");
             stringBuilder.Append(this.TableName);
             stringBuilder.AppendLine("] (");
@@ -229,7 +312,6 @@ namespace Bring.Sqlserver
                     stringBuilder.AppendLine("[" + fn.Key + "] " + sqlType + " NULL,");
             }
 
-            // Remove trailing comma
             stringBuilder.Remove(stringBuilder.Length - 3, 3);
             stringBuilder.Append(")");
 
@@ -237,32 +319,35 @@ namespace Bring.Sqlserver
             try
             {
                 this.Command.ExecuteNonQuery();
-                Console.WriteLine("Created table: " + this.TableName);
+                Console.WriteLine("SQLInteraction.CreateTable: Created table: " + this.TableName);
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Could not create table: " + ex.Message);
+                Console.WriteLine("SQLInteraction.CreateTable: ERROR - Could not create table: " + ex.Message);
                 Console.WriteLine("CREATE TABLE STATEMENT: " + stringBuilder.ToString());
             }
         }
 
-        /// <summary>
-        /// Populates the field dictionary with SharePoint fields,
-        /// excluding computed fields, ensuring unique SQL column names.
-        /// </summary>
         private void BuildDictionary()
         {
-            Console.WriteLine("Building FNDictionary from fields...");
+            Console.WriteLine("SQLInteraction.BuildDictionary: Building FNDictionary from fields...");
             foreach (Field field in this.List.Fields)
             {
                 if (field.TypeAsString != "Computed")
-                    this.FNDictionary.Add(this.GetKeyName(this.GetActualColName(field), 1), field);
+                {
+                    try
+                    {
+                        this.FNDictionary.Add(this.GetKeyName(this.GetActualColName(field), 1), field);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("SQLInteraction.BuildDictionary: ERROR - Failed to add field to dictionary: " + field.Title);
+                        Console.WriteLine("Exception: " + ex.Message);
+                    }
+                }
             }
         }
 
-        /// <summary>
-        /// Generates a unique key name for a field by appending an index if needed.
-        /// </summary>
         private string GetKeyName(string key, int i = 1)
         {
             string testKey = i == 1 ? key : key + i;
@@ -271,10 +356,6 @@ namespace Bring.Sqlserver
                 : testKey;
         }
 
-        /// <summary>
-        /// Determines the actual column name, handling duplicates by
-        /// falling back to the field's internal name in PascalCase.
-        /// </summary>
         private string GetActualColName(Field pField)
         {
             string name = this.ColNameConvetions(pField);
@@ -294,9 +375,6 @@ namespace Bring.Sqlserver
                 : name;
         }
 
-        /// <summary>
-        /// Applies naming conventions based on field title and type.
-        /// </summary>
         private string ColNameConvetions(Field pField)
         {
             var sb = new StringBuilder(this.ToPascalCase(pField.Title, false));
@@ -310,9 +388,6 @@ namespace Bring.Sqlserver
             return sb.ToString();
         }
 
-        /// <summary>
-        /// Maps SharePoint field types to appropriate SQL data types.
-        /// </summary>
         private string SQLFieldType(Field field)
         {
             switch (field.TypeAsString)
@@ -349,18 +424,14 @@ namespace Bring.Sqlserver
                         ? "[nvarchar](MAX)"
                         : "[int]";
                 default:
-                    Console.WriteLine(field.Title + " has unknown type: " + field.TypeAsString);
+                    Console.WriteLine("SQLInteraction.SQLFieldType: " + field.Title + " has unknown type: " + field.TypeAsString);
                     return null;
             }
         }
 
-        /// <summary>
-        /// Alters the existing table to match the current field dictionary,
-        /// adding or modifying columns as needed.
-        /// </summary>
         private void UpdateTableDesign()
         {
-            Console.WriteLine("Updating table design...");
+            Console.WriteLine("SQLInteraction.UpdateTableDesign: Updating table design...");
             foreach (var fn in this.FNDictionary)
             {
                 string sqlType = this.SQLFieldType(fn.Value);
@@ -368,31 +439,33 @@ namespace Bring.Sqlserver
                                                     sqlType.LastIndexOf(']') - sqlType.IndexOf('[') - 1);
                 string colName = fn.Key;
 
-                // Check if column exists
-                this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
-                if ((int)this.Command.ExecuteScalar() == 0)
+                try
                 {
-                    Console.WriteLine($"Adding new column: {colName}");
-                    this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ADD [{colName}] {sqlType}";
-                    this.Command.ExecuteNonQuery();
-                }
-                else
-                {
-                    // Check if type matches; alter if necessary
-                    this.Command.CommandText = $"SELECT [DATA_TYPE] FROM LAKEDB.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
-                    if ((string)this.Command.ExecuteScalar() != baseType)
+                    this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
+                    if ((int)this.Command.ExecuteScalar() == 0)
                     {
-                        Console.WriteLine($"Altering column: {colName}");
-                        this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ALTER COLUMN [{colName}] {sqlType}";
+                        Console.WriteLine($"SQLInteraction.UpdateTableDesign: Adding new column: {colName}");
+                        this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ADD [{colName}] {sqlType}";
                         this.Command.ExecuteNonQuery();
                     }
+                    else
+                    {
+                        this.Command.CommandText = $"SELECT [DATA_TYPE] FROM LAKEDB.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
+                        if ((string)this.Command.ExecuteScalar() != baseType)
+                        {
+                            Console.WriteLine($"SQLInteraction.UpdateTableDesign: Altering column: {colName}");
+                            this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ALTER COLUMN [{colName}] {sqlType}";
+                            this.Command.ExecuteNonQuery();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"SQLInteraction.UpdateTableDesign: ERROR - Failed to update column '{colName}': {ex.Message}");
                 }
             }
         }
 
-        /// <summary>
-        /// Builds the column list segment for INSERT statements.
-        /// </summary>
         private string GetSQLColNames()
         {
             var sb = new StringBuilder();
@@ -404,28 +477,27 @@ namespace Bring.Sqlserver
             return sb.ToString();
         }
 
-        /// <summary>
-        /// Updates a metadata table to record the last refresh time for this list.
-        /// </summary>
         private void UpdateMetadata()
         {
-            Console.WriteLine("Updating metadata...");
-            this.Command.CommandText = $"DELETE FROM Metadata WHERE TableName = '{this.TableName}'";
-            this.Command.ExecuteNonQuery();
-            this.Command.CommandText = $"INSERT INTO Metadata (TableName, LastRefreshDate) Values ('{this.TableName}', '{this.CurrentTime}')";
-            this.Command.ExecuteNonQuery();
+            Console.WriteLine("SQLInteraction.UpdateMetadata: Updating metadata...");
+            try
+            {
+                this.Command.CommandText = $"DELETE FROM Metadata WHERE TableName = '{this.TableName}'";
+                this.Command.ExecuteNonQuery();
+                this.Command.CommandText = $"INSERT INTO Metadata (TableName, LastRefreshDate) Values ('{this.TableName}', '{this.CurrentTime}')";
+                this.Command.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("SQLInteraction.UpdateMetadata: ERROR - Failed to update metadata: " + ex.Message);
+            }
         }
 
-        /// <summary>
-        /// Converts arbitrary text into PascalCase, preserving alphanumeric characters.
-        /// Appends 'IN' if internal field name starts with underscore.
-        /// </summary>
         private string ToPascalCase(string text, bool internalName)
         {
             if (internalName && text.StartsWith("_"))
                 text += "IN";
 
-            // Replace non-alphanumeric with spaces, then TitleCase
             var sanitized = new StringBuilder();
             foreach (char c in text)
                 sanitized.Append(char.IsLetterOrDigit(c) ? c : ' ');

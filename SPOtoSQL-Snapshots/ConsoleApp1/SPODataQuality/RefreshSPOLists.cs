@@ -16,62 +16,123 @@ namespace Bring.SPODataQuality
         {
             try
             {
-                // Print debug information and the current timestamp
                 Console.WriteLine("DEBUG: Starting Main");
                 Console.WriteLine("CURRENT TIME: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
 
-                // Test SQL connection before proceeding
-                TestSQLConnection();
-                Console.WriteLine("DEBUG: Main: SQL connection test completed");
-
-                // Retrieve SharePoint credentials (username and password) from a configuration source
-                var (username, password) = ConfigurationReader.GetSharePointCredentials();
-                SPOUser spoUser = new SPOUser(username, password); // Create a SharePoint user object
-                Console.WriteLine("DEBUG: Main: SPOUser created"); // When Username and Password are filled correctly, this line will be printed
-
-                // Initialize two SharePoint list objects and assign the user credentials to them
-                var list1 = new SPOList();
-                list1.SPOUser = spoUser;
-                Console.WriteLine("DEBUG: Main: First SPOList configured");
-
-                var list2 = new SPOList();
-                list2.SPOUser = spoUser;
-                Console.WriteLine("DEBUG: Main: Second SPOList configured");
-
-                // Check if command-line arguments are provided
-                if ((uint)args.Length > 0U)
+                try
                 {
-                    string lower = args[0].ToLower(); // Convert the first argument to lowercase
-                    Console.WriteLine("DEBUG: Main: Received argument - " + lower);
-
-                    // Decide which update to perform based on the argument
-                    if (lower == "daily")
-                    {
-                        // Perform a daily update from SharePoint to SQL Server
-                        Console.WriteLine("DEBUG: Main: Executing daily");
-                        RefreshSQLLists.SPOtoSQLUpdate(true);
-                    }
-                    else if (lower == "monthly")
-                    {
-                        // Perform a monthly update from SharePoint to SQL Server
-                        Console.WriteLine("DEBUG: Main: Executing monthly");
-                        RefreshSQLLists.SPOtoSQLUpdate(false);
-                    }
-                    else
-                    {
-                        // Handle unrecognized arguments
-                        Console.WriteLine("Unrecognized argument, please use daily or monthly as the argument");
-                    }
+                    TestSQLConnection();
+                    Console.WriteLine("DEBUG: Main: SQL connection test completed");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: SQL connection test failed.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    return;
                 }
 
-                // Indicate the end of processing
+                (string username, string password) credentials;
+                try
+                {
+                    credentials = ConfigurationReader.GetSharePointCredentials();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to retrieve SharePoint credentials.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    return;
+                }
+
+                SPOUser spoUser;
+                try
+                {
+                    spoUser = new SPOUser(credentials.username, credentials.password);
+                    Console.WriteLine("DEBUG: Main: SPOUser created");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to create SPOUser.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    return;
+                }
+
+                SPOList list1 = null, list2 = null;
+                try
+                {
+                    list1 = new SPOList();
+                    list1.SPOUser = spoUser;
+                    Console.WriteLine("DEBUG: Main: First SPOList configured");
+
+                    list2 = new SPOList();
+                    list2.SPOUser = spoUser;
+                    Console.WriteLine("DEBUG: Main: Second SPOList configured");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to configure SPOList(s).");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    return;
+                }
+
+                try
+                {
+                    if ((uint)args.Length > 0U)
+                    {
+                        string lower = args[0].ToLower();
+                        Console.WriteLine("DEBUG: Main: Received argument - " + lower);
+
+                        if (lower == "daily")
+                        {
+                            Console.WriteLine("DEBUG: Main: Executing daily");
+                            try
+                            {
+                                RefreshSQLLists.SPOtoSQLUpdate(true);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine("ERROR: Exception during daily update.");
+                                Console.WriteLine("Exception: " + ex.Message);
+                                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                            }
+                        }
+                        else if (lower == "monthly")
+                        {
+                            Console.WriteLine("DEBUG: Main: Executing monthly");
+                            try
+                            {
+                                RefreshSQLLists.SPOtoSQLUpdate(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine("ERROR: Exception during monthly update.");
+                                Console.WriteLine("Exception: " + ex.Message);
+                                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("Unrecognized argument, please use daily or monthly as the argument");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Exception while processing arguments.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                }
+
                 Console.WriteLine("End of requests.");
                 Console.WriteLine();
             }
             catch (Exception ex)
             {
-                // Catch and display any errors that occur during execution
-                Console.WriteLine("An error occurred: " + ex.Message);
+                Console.WriteLine("FATAL ERROR: An error occurred in Main.");
+                Console.WriteLine("Exception: " + ex.Message);
                 Console.WriteLine("Stack Trace: " + ex.StackTrace);
             }
         }
@@ -99,6 +160,12 @@ namespace Bring.SPODataQuality
                         Console.ReadKey();
                         Environment.Exit(1);
                     }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("ERROR: Unexpected error while opening SQL connection.");
+                        Console.WriteLine("Exception: " + ex.Message);
+                        throw;
+                    }
 
                     Console.WriteLine($"Server: {connection.DataSource}");
                     Console.WriteLine($"Database: {connection.Database}");
@@ -108,9 +175,17 @@ namespace Bring.SPODataQuality
                     using (var command = connection.CreateCommand())
                     {
                         // SELECT test
-                        command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES";
-                        int tableCount = (int)command.ExecuteScalar();
-                        Console.WriteLine($"Number of tables in database: {tableCount}");
+                        try
+                        {
+                            command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES";
+                            int tableCount = (int)command.ExecuteScalar();
+                            Console.WriteLine($"Number of tables in database: {tableCount}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("ERROR: Failed to execute SELECT COUNT(*) on INFORMATION_SCHEMA.TABLES.");
+                            Console.WriteLine("Exception: " + ex.Message);
+                        }
 
                         // CREATE TABLE permission test
                         try
@@ -122,6 +197,11 @@ namespace Bring.SPODataQuality
                         catch (SqlException ex)
                         {
                             Console.WriteLine($"Warning: No CREATE TABLE permission: {ex.Message}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("ERROR: Unexpected error during CREATE TABLE permission test.");
+                            Console.WriteLine("Exception: " + ex.Message);
                         }
                     }
                 }
@@ -148,26 +228,43 @@ namespace Bring.SPODataQuality
         public static void GetAllLists()
         {
             Console.WriteLine("DEBUG: Entering GetAllLists");
-            // Get SharePoint credentials
-            var (username, password) = ConfigurationReader.GetSharePointCredentials();
-            SPOUser spoUser = new SPOUser(username, password);
-            // Set up a context for the SharePoint site named "seed"
-            Context context = new Context()
+            try
             {
-                Site = "seed",
-                SPOUser = spoUser
-            };
-            // Iterate through all lists in the SharePoint site
-            foreach (List allList in (ClientObjectCollection<List>)context.GetAllLists())
-            {
-                Console.WriteLine("DEBUG: Loading list - " + allList.Title);
-                // Load the IsSystemList property to determine if the list is a system list
-                context.Ctx.Load<List>(allList, new Expression<Func<List, object>>[1]
+                // Get SharePoint credentials
+                var (username, password) = ConfigurationReader.GetSharePointCredentials();
+                SPOUser spoUser = new SPOUser(username, password);
+                // Set up a context for the SharePoint site named "seed"
+                Context context = new Context()
                 {
-                    (Expression<Func<List, object>>) (l => (object) l.IsSystemList)
-                });
-                context.Ctx.ExecuteQuery(); // Execute the query to retrieve the data
-                Console.WriteLine("List Name: " + allList.Title + "; is: " + allList.IsSystemList.ToString());
+                    Site = "seed",
+                    SPOUser = spoUser
+                };
+                // Iterate through all lists in the SharePoint site
+                foreach (List allList in (ClientObjectCollection<List>)context.GetAllLists())
+                {
+                    try
+                    {
+                        Console.WriteLine("DEBUG: Loading list - " + allList.Title);
+                        // Load the IsSystemList property to determine if the list is a system list
+                        context.Ctx.Load<List>(allList, new Expression<Func<List, object>>[1]
+                        {
+                            (Expression<Func<List, object>>) (l => (object) l.IsSystemList)
+                        });
+                        context.Ctx.ExecuteQuery(); // Execute the query to retrieve the data
+                        Console.WriteLine("List Name: " + allList.Title + "; is: " + allList.IsSystemList.ToString());
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"ERROR: Failed to load or display list '{allList.Title}'.");
+                        Console.WriteLine("Exception: " + ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("ERROR: Exception in GetAllLists.");
+                Console.WriteLine("Exception: " + ex.Message);
+                Console.WriteLine("Stack Trace: " + ex.StackTrace);
             }
         }
 
@@ -175,21 +272,50 @@ namespace Bring.SPODataQuality
         private static void SPODebug(string listName, string ctxURL, SPOUser user)
         {
             Console.WriteLine("DEBUG: Entering SPODebug");
-            // Create a SharePoint list object with a CAML query limiting to 1 item
-            SPOList spoList = new SPOList
+            try
             {
-                Name = listName,
-                Site = ctxURL,
-                SPOUser = user,
-                CAMLQuery = "<View><RowLimit>1</RowLimit></View>"
-            };
+                // Create a SharePoint list object with a CAML query limiting to 1 item
+                SPOList spoList = new SPOList
+                {
+                    Name = listName,
+                    Site = ctxURL,
+                    SPOUser = user,
+                    CAMLQuery = "<View><RowLimit>1</RowLimit></View>"
+                };
 
-            Console.WriteLine("DEBUG: Executing Build");
-            spoList.Build(); // Build the list to load its data
+                Console.WriteLine("DEBUG: Executing Build");
+                try
+                {
+                    spoList.Build(); // Build the list to load its data
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to build SPOList.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    return;
+                }
 
-            Console.WriteLine("DEBUG: Executing PropsToString");
-            // Print the properties of the first item in the list for debugging
-            spoList.PropsToString(spoList.ItemCollection[0]);
+                Console.WriteLine("DEBUG: Executing PropsToString");
+                try
+                {
+                    // Print the properties of the first item in the list for debugging
+                    if (spoList.ItemCollection != null && spoList.ItemCollection.Count > 0)
+                        spoList.PropsToString(spoList.ItemCollection[0]);
+                    else
+                        Console.WriteLine("No items found in the list.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to print properties of the first item.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("ERROR: Exception in SPODebug.");
+                Console.WriteLine("Exception: " + ex.Message);
+                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+            }
         }
 
         // Method to synchronize data from a source SharePoint list to a destination list
@@ -199,62 +325,141 @@ namespace Bring.SPODataQuality
             {
                 Console.WriteLine("DEBUG: Starting RefreshListsSPO");
 
-                // Build the source list to load its data
-                sourceList.Build();
-                Console.WriteLine("DEBUG: sourceList.Build completed");
+                try
+                {
+                    // Build the source list to load its data
+                    sourceList.Build();
+                    Console.WriteLine("DEBUG: sourceList.Build completed");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to build source SPOList.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    return;
+                }
 
-                // Build the destination list to load its data
-                destList.Build();
-                Console.WriteLine("DEBUG: destList.Build completed");
+                try
+                {
+                    // Build the destination list to load its data
+                    destList.Build();
+                    Console.WriteLine("DEBUG: destList.Build completed");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to build destination SPOList.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    return;
+                }
 
                 int num1 = 0; // Last ID in source list
                 int num2 = 0; // Last ID in destination list
 
-                // Get the field mappings between the source and destination lists
-                string[,] actualFields = GetActualFields(sourceList, destList);
-                Console.WriteLine("DEBUG: Fields obtained");
+                string[,] actualFields;
+                try
+                {
+                    // Get the field mappings between the source and destination lists
+                    actualFields = GetActualFields(sourceList, destList);
+                    Console.WriteLine("DEBUG: Fields obtained");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to get actual fields mapping.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    return;
+                }
 
-                // Determine the last ID in the source list
-                if ((uint)sourceList.ItemCollection.Count > 0U)
-                    num1 = (int)sourceList.ItemCollection[sourceList.ItemCollection.Count - 1]["ID"];
-                // Determine the last ID in the destination list
-                if ((uint)destList.ItemCollection.Count > 0U)
-                    num2 = (int)destList.ItemCollection[destList.ItemCollection.Count - 1]["ID"];
+                try
+                {
+                    // Determine the last ID in the source list
+                    if ((uint)sourceList.ItemCollection.Count > 0U)
+                        num1 = (int)sourceList.ItemCollection[sourceList.ItemCollection.Count - 1]["ID"];
+                    // Determine the last ID in the destination list
+                    if ((uint)destList.ItemCollection.Count > 0U)
+                        num2 = (int)destList.ItemCollection[destList.ItemCollection.Count - 1]["ID"];
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to determine last IDs in source/destination lists.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
 
                 // If the destination list has fewer items, add new items to match the source
                 if (num2 < num1)
                 {
                     Console.WriteLine("DEBUG: Adding new items");
-                    do
+                    try
                     {
-                        destList.AddItem(); // Add a new item to the destination list
-                        ++num2;
+                        do
+                        {
+                            destList.AddItem(); // Add a new item to the destination list
+                            ++num2;
+                        }
+                        while (num2 < num1);
+
+                        Console.WriteLine("Adding new items...");
+                        destList.Update(); // Update the destination list with the new items
+                        Console.WriteLine("Done adding items.");
                     }
-                    while (num2 < num1);
-
-                    Console.WriteLine("Adding new items...");
-                    destList.Update(); // Update the destination list with the new items
-                    Console.WriteLine("Done adding items.");
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("ERROR: Failed to add or update new items in destination list.");
+                        Console.WriteLine("Exception: " + ex.Message);
+                    }
                 }
 
-                // Update existing items in the destination list with data from the source
-                for (int index1 = 0; index1 < sourceList.ItemCollection.Count; ++index1)
+                try
                 {
-                    int id = (int)sourceList.ItemCollection[index1]["ID"];
-                    // Copy field values from source to destination based on the field mappings
-                    for (int index2 = 0; index2 < actualFields.Length / 2; ++index2)
-                        destList.ItemCollection.GetById(id)[actualFields[index2, 0]] = sourceList.ItemCollection[index1][actualFields[index2, 1]];
-                    destList.ItemCollection.GetById(id).Update(); // Update the item in the destination list
+                    // Update existing items in the destination list with data from the source
+                    for (int index1 = 0; index1 < sourceList.ItemCollection.Count; ++index1)
+                    {
+                        int id = (int)sourceList.ItemCollection[index1]["ID"];
+                        // Copy field values from source to destination based on the field mappings
+                        for (int index2 = 0; index2 < actualFields.Length / 2; ++index2)
+                        {
+                            try
+                            {
+                                destList.ItemCollection.GetById(id)[actualFields[index2, 0]] = sourceList.ItemCollection[index1][actualFields[index2, 1]];
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"ERROR: Failed to copy field '{actualFields[index2, 1]}' to '{actualFields[index2, 0]}' for item ID {id}.");
+                                Console.WriteLine("Exception: " + ex.Message);
+                            }
+                        }
+                        try
+                        {
+                            destList.ItemCollection.GetById(id).Update(); // Update the item in the destination list
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"ERROR: Failed to update item ID {id} in destination list.");
+                            Console.WriteLine("Exception: " + ex.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Exception during item synchronization.");
+                    Console.WriteLine("Exception: " + ex.Message);
                 }
 
-                // Execute the query to apply all changes to the SharePoint site
-                destList.Ctx.ExecuteQuery();
-                Console.WriteLine(sourceList.Site + " " + sourceList.Name + " -> " + destList.Site + " " + destList.Name + ": Done!");
+                try
+                {
+                    // Execute the query to apply all changes to the SharePoint site
+                    destList.Ctx.ExecuteQuery();
+                    Console.WriteLine(sourceList.Site + " " + sourceList.Name + " -> " + destList.Site + " " + destList.Name + ": Done!");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("ERROR: Failed to execute query on destination list context.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                }
             }
             catch (Exception ex)
             {
                 // Catch and display any errors during the sync process
                 Console.WriteLine("ERROR in RefreshListsSPO: " + ex.Message);
+                Console.WriteLine("Stack Trace: " + ex.StackTrace);
             }
         }
 
@@ -262,55 +467,71 @@ namespace Bring.SPODataQuality
         private static string[,] GetActualFields(SPOList listone, SPOList listtwo)
         {
             Console.WriteLine("DEBUG: Entering GetActualFields");
-
-            // Get fields from both lists
-            List<Field> fields1 = GetFields(listone);
-            List<Field> fields2 = GetFields(listtwo);
-
-            // Create a 2D array to store the field mappings (internal names)
-            string[,] strArray = new string[fields1.Count, 2];
-            int index1 = 0;
-            int index2 = 0;
-
-            // Match fields by title and store their internal names
-            foreach (Field field1 in fields1)
+            try
             {
-                Field field2;
-                do
+                // Get fields from both lists
+                List<Field> fields1 = GetFields(listone);
+                List<Field> fields2 = GetFields(listtwo);
+                                
+                // Create a 2D array to store the field mappings (internal names)
+                string[,] strArray = new string[fields1.Count, 2];
+                int index1 = 0;
+                int index2 = 0;
+
+                // Match fields by title and store their internal names
+                foreach (Field field1 in fields1)
                 {
-                    field2 = fields2[index2];
-                    if (field1.Title == field2.Title)
+                    Field field2;
+                    do
                     {
-                        strArray[index1, 0] = field2.InternalName; // Destination field
-                        strArray[index1, 1] = field1.InternalName; // Source field
-                        Console.WriteLine($"DEBUG: Match found - {field1.Title}");
+                        field2 = fields2[index2];
+                        if (field1.Title == field2.Title)
+                        {
+                            strArray[index1, 0] = field2.InternalName; // Destination field
+                            strArray[index1, 1] = field1.InternalName; // Source field
+                            Console.WriteLine($"DEBUG: Match found - {field1.Title}");
+                        }
+                        ++index2;
                     }
-                    ++index2;
+                    while (field1.Title != field2.Title && index2 < fields2.Count);
+
+                    ++index1;
+                    index2 = 0; // Reset index2 for the next field
                 }
-                while (field1.Title != field2.Title && index2 < fields2.Count);
 
-                ++index1;
-                index2 = 0; // Reset index2 for the next field
+                return strArray; // Return the field mappings
             }
-
-            return strArray; // Return the field mappings
+            catch (Exception ex)
+            {
+                Console.WriteLine("ERROR: Exception in GetActualFields.");
+                Console.WriteLine("Exception: " + ex.Message);
+                throw;
+            }
         }
 
         // Helper method to retrieve fields from a SharePoint list, excluding base type fields except "Title"
         private static List<Field> GetFields(SPOList list)
         {
             Console.WriteLine("DEBUG: Entering GetFields");
-
             List<Field> fieldList = new List<Field>();
-            // Iterate through all fields in the list
-            foreach (Field field in (ClientObjectCollection<Field>)list.Fields)
+            try
             {
-                // Include fields that are not from the base type or are the "Title" field
-                if (!field.FromBaseType || field.InternalName == "Title")
+                // Iterate through all fields in the list
+                foreach (Field field in (ClientObjectCollection<Field>)list.Fields)
                 {
-                    fieldList.Add(field);
-                    Console.WriteLine($"DEBUG: Field added - {field.Title}");
+                    // Include fields that are not from the base type or are the "Title" field
+                    if (!field.FromBaseType || field.InternalName == "Title")
+                    {
+                        fieldList.Add(field);
+                        Console.WriteLine($"DEBUG: Field added - {field.Title}");
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("ERROR: Exception in GetFields.");
+                Console.WriteLine("Exception: " + ex.Message);
+                throw;
             }
 
             return fieldList; // Return the list of fields
