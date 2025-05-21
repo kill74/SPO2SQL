@@ -11,13 +11,14 @@ namespace Bring.Sqlserver
 {
     /// <summary>
     /// Encapsulates interactions between a SharePoint list and a SQL Server database,
-    /// including schema creation, updates, and data transfer.
+    /// including schema creation, updates, and data transfer with column selection support.
     /// </summary>
     internal class SQLInteraction
     {
         private const string DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.fff";
         private const string FUTURE_DATE = "2100-01-01 00:00:00.000";
 
+        // Core properties
         public SqlConnection Connection { get; set; }
         public SqlCommand Command { get; set; }
         public SqlTransaction Transaction { get; set; }
@@ -25,6 +26,9 @@ namespace Bring.Sqlserver
         public string TableName { get; set; }
         public Dictionary<string, Field> FNDictionary { get; set; }
         public string CurrentTime { get; set; }
+
+        // Store selected columns from configuration
+        private HashSet<string> SelectedColumns { get; set; }
 
         /// <summary>
         /// Initializes the SQL table for the specified SharePoint list,
@@ -36,6 +40,10 @@ namespace Bring.Sqlserver
 
             try
             {
+                // Load selected columns from configuration
+                this.SelectedColumns = ConfigurationReader.GetSelectedColumns();
+                LogInfo("Build", $"Selected columns from config: {(this.SelectedColumns == null ? "All" : string.Join(", ", this.SelectedColumns))}");
+
                 this.TableName = this.ToPascalCase(this.List.Name, false);
 
                 try
@@ -47,11 +55,6 @@ namespace Bring.Sqlserver
                 catch (SqlException ex)
                 {
                     LogError("Build", "Database connection failed", ex, true);
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    LogError("Build", "Unexpected error while connecting to database", ex, true);
                     throw;
                 }
 
@@ -107,6 +110,9 @@ namespace Bring.Sqlserver
             }
         }
 
+        /// <summary>
+        /// Performs a daily update of the SQL table with SharePoint data.
+        /// </summary>
         public void DailyUpdate()
         {
             try
@@ -157,10 +163,11 @@ namespace Bring.Sqlserver
                 LogFatal("DailyUpdate", "Critical failure during daily update", ex);
                 SafeRollback();
             }
-
-            LogInfo("DailyUpdate", $"Daily update completed for: {this.TableName}");
         }
 
+        /// <summary>
+        /// Updates the SQL table with current SharePoint data.
+        /// </summary>
         public void CurrentTimeUpdate()
         {
             try
@@ -201,8 +208,130 @@ namespace Bring.Sqlserver
                 LogFatal("CurrentTimeUpdate", "Critical failure during current-time update", ex);
                 SafeRollback();
             }
+        }
 
-            LogInfo("CurrentTimeUpdate", $"Update completed for: {this.TableName} at {this.CurrentTime}");
+        /// <summary>
+        /// Builds the dictionary of fields to be replicated, respecting column selection configuration.
+        /// </summary>
+        private void BuildDictionary()
+        {
+            LogInfo("BuildDictionary", "Building field name dictionary...");
+            int processedFields = 0;
+            int skippedFields = 0;
+
+            foreach (Field field in this.List.Fields)
+            {
+                if (field.TypeAsString != "Computed")
+                {
+                    try
+                    {
+                        string columnName = this.GetActualColName(field);
+
+                        // Only add the field if it's selected in configuration or if no specific columns are selected
+                        if (this.SelectedColumns == null || this.SelectedColumns.Contains(columnName))
+                        {
+                            this.FNDictionary.Add(this.GetKeyName(columnName, 1), field);
+                            processedFields++;
+                            LogInfo("BuildDictionary", $"Added field: {columnName}");
+                        }
+                        else
+                        {
+                            skippedFields++;
+                            LogInfo("BuildDictionary", $"Skipped field (not selected): {columnName}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        skippedFields++;
+                        LogError("BuildDictionary", $"Failed to process field: {field.Title}", ex);
+                    }
+                }
+                else
+                {
+                    skippedFields++;
+                }
+            }
+
+            LogInfo("BuildDictionary", $"Dictionary built. Processed: {processedFields}, Skipped: {skippedFields}");
+        }
+
+        private bool TableExists(string listName)
+        {
+            try
+            {
+                this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{listName}'";
+                bool exists = (int)this.Command.ExecuteScalar() != 0;
+                LogInfo("TableExists", $"Table '{listName}' exists: {exists}");
+                return exists;
+            }
+            catch (Exception ex)
+            {
+                LogError("TableExists", $"Failed to check existence of table '{listName}'", ex, true);
+                throw;
+            }
+        }
+
+        private void CreateTable()
+        {
+            LogInfo("CreateTable", $"Creating new table: {this.TableName}");
+            StringBuilder stringBuilder = new StringBuilder();
+            stringBuilder.AppendLine($"CREATE TABLE [{this.TableName}] (");
+            stringBuilder.AppendLine("[Snapshot] datetime NULL,");
+
+            foreach (var fn in this.FNDictionary)
+            {
+                string sqlType = this.SQLFieldType(fn.Value);
+                if (sqlType != null)
+                    stringBuilder.AppendLine($"[{fn.Key}] {sqlType} NULL,");
+            }
+
+            stringBuilder.Remove(stringBuilder.Length - 3, 3);
+            stringBuilder.Append(")");
+
+            this.Command.CommandText = stringBuilder.ToString();
+            try
+            {
+                this.Command.ExecuteNonQuery();
+                LogInfo("CreateTable", $"Successfully created table: {this.TableName}");
+            }
+            catch (Exception ex)
+            {
+                LogError("CreateTable", $"Failed to create table: {this.TableName}", ex);
+                throw;
+            }
+        }
+
+        private void UpdateTableDesign()
+        {
+            LogInfo("UpdateTableDesign", $"Updating design for table: {this.TableName}");
+            int updatedColumns = 0;
+            int failedColumns = 0;
+
+            foreach (var fn in this.FNDictionary)
+            {
+                try
+                {
+                    string sqlType = this.SQLFieldType(fn.Value);
+                    string baseType = sqlType.Substring(sqlType.IndexOf('[') + 1,
+                                                      sqlType.LastIndexOf(']') - sqlType.IndexOf('[') - 1);
+                    string colName = fn.Key;
+
+                    this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
+                    if ((int)this.Command.ExecuteScalar() == 0)
+                    {
+                        this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ADD [{colName}] {sqlType}";
+                        this.Command.ExecuteNonQuery();
+                        updatedColumns++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failedColumns++;
+                    LogError("UpdateTableDesign", $"Failed to update column: {fn.Key}", ex);
+                }
+            }
+
+            LogInfo("UpdateTableDesign", $"Design update completed. Updated: {updatedColumns}, Failed: {failedColumns}");
         }
 
         private void TransferData(string snapDate)
@@ -271,7 +400,6 @@ namespace Bring.Sqlserver
                     {
                         failedItems++;
                         LogError("TransferData", $"Failed to insert item {processedItems + failedItems}", ex);
-                        LogDebug("TransferData", $"Failed SQL: {stringBuilder}");
                     }
                 }
                 catch (Exception ex)
@@ -282,123 +410,6 @@ namespace Bring.Sqlserver
             }
 
             LogInfo("TransferData", $"Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
-        }
-
-        private bool TableExists(string listName)
-        {
-            try
-            {
-                this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{listName}'";
-                bool exists = (int)this.Command.ExecuteScalar() != 0;
-                LogInfo("TableExists", $"Table '{listName}' exists: {exists}");
-                return exists;
-            }
-            catch (Exception ex)
-            {
-                LogError("TableExists", $"Failed to check existence of table '{listName}'", ex, true);
-                throw;
-            }
-        }
-
-        private void CreateTable()
-        {
-            LogInfo("CreateTable", $"Creating new table: {this.TableName}");
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.AppendLine($"CREATE TABLE [{this.TableName}] (");
-            stringBuilder.AppendLine("[Snapshot] datetime NULL,");
-
-            foreach (var fn in this.FNDictionary)
-            {
-                string sqlType = this.SQLFieldType(fn.Value);
-                if (sqlType != null)
-                    stringBuilder.AppendLine($"[{fn.Key}] {sqlType} NULL,");
-            }
-
-            stringBuilder.Remove(stringBuilder.Length - 3, 3);
-            stringBuilder.Append(")");
-
-            this.Command.CommandText = stringBuilder.ToString();
-            try
-            {
-                this.Command.ExecuteNonQuery();
-                LogInfo("CreateTable", $"Successfully created table: {this.TableName}");
-            }
-            catch (Exception ex)
-            {
-                LogError("CreateTable", $"Failed to create table: {this.TableName}", ex);
-                LogDebug("CreateTable", $"Failed SQL: {stringBuilder}");
-                throw;
-            }
-        }
-
-        private void BuildDictionary()
-        {
-            LogInfo("BuildDictionary", "Building field name dictionary...");
-            int processedFields = 0;
-            int skippedFields = 0;
-
-            foreach (Field field in this.List.Fields)
-            {
-                if (field.TypeAsString != "Computed")
-                {
-                    try
-                    {
-                        this.FNDictionary.Add(this.GetKeyName(this.GetActualColName(field), 1), field);
-                        processedFields++;
-                    }
-                    catch (Exception ex)
-                    {
-                        skippedFields++;
-                        LogError("BuildDictionary", $"Failed to process field: {field.Title}", ex);
-                    }
-                }
-                else
-                {
-                    skippedFields++;
-                }
-            }
-
-            LogInfo("BuildDictionary", $"Dictionary built. Processed: {processedFields}, Skipped: {skippedFields}");
-        }
-
-        private string GetKeyName(string key, int i = 1)
-        {
-            string testKey = i == 1 ? key : $"{key}{i}";
-            return this.FNDictionary.ContainsKey(testKey)
-                ? this.GetKeyName(key, i + 1)
-                : testKey;
-        }
-
-        private string GetActualColName(Field pField)
-        {
-            string name = this.ColNameConvetions(pField);
-            int count = 0;
-
-            foreach (Field field in this.List.Fields)
-            {
-                if (field.TypeAsString != "Computed" &&
-                    name.Equals(this.ColNameConvetions(field), StringComparison.OrdinalIgnoreCase))
-                {
-                    count++;
-                }
-            }
-
-            return count > 1
-                ? this.ToPascalCase(pField.InternalName, true)
-                : name;
-        }
-
-        private string ColNameConvetions(Field pField)
-        {
-            var sb = new StringBuilder(this.ToPascalCase(pField.Title, false));
-            string type = pField.TypeAsString;
-
-            if (type == "Choice")
-                sb.Append("Value");
-            else if (type == "User" || (type == "Lookup" && !pField.FromBaseType))
-                sb.Append("Id");
-
-            return sb.ToString();
         }
 
         private string SQLFieldType(Field field)
@@ -442,51 +453,6 @@ namespace Bring.Sqlserver
             }
         }
 
-        private void UpdateTableDesign()
-        {
-            LogInfo("UpdateTableDesign", $"Updating design for table: {this.TableName}");
-            int updatedColumns = 0;
-            int failedColumns = 0;
-
-            foreach (var fn in this.FNDictionary)
-            {
-                try
-                {
-                    string sqlType = this.SQLFieldType(fn.Value);
-                    string baseType = sqlType.Substring(sqlType.IndexOf('[') + 1,
-                                                      sqlType.LastIndexOf(']') - sqlType.IndexOf('[') - 1);
-                    string colName = fn.Key;
-
-                    this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
-                    if ((int)this.Command.ExecuteScalar() == 0)
-                    {
-                        LogInfo("UpdateTableDesign", $"Adding new column: {colName}");
-                        this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ADD [{colName}] {sqlType}";
-                        this.Command.ExecuteNonQuery();
-                        updatedColumns++;
-                    }
-                    else
-                    {
-                        this.Command.CommandText = $"SELECT [DATA_TYPE] FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
-                        if ((string)this.Command.ExecuteScalar() != baseType)
-                        {
-                            LogInfo("UpdateTableDesign", $"Modifying column type: {colName}");
-                            this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ALTER COLUMN [{colName}] {sqlType}";
-                            this.Command.ExecuteNonQuery();
-                            updatedColumns++;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    failedColumns++;
-                    LogError("UpdateTableDesign", $"Failed to update column: {fn.Key}", ex);
-                }
-            }
-
-            LogInfo("UpdateTableDesign", $"Design update completed. Updated: {updatedColumns}, Failed: {failedColumns}");
-        }
-
         private string GetSQLColNames()
         {
             var sb = new StringBuilder();
@@ -514,6 +480,46 @@ namespace Bring.Sqlserver
                 LogError("UpdateMetadata", "Failed to update metadata", ex);
                 throw;
             }
+        }
+
+        private string GetKeyName(string key, int i = 1)
+        {
+            string testKey = i == 1 ? key : $"{key}{i}";
+            return this.FNDictionary.ContainsKey(testKey)
+                ? this.GetKeyName(key, i + 1)
+                : testKey;
+        }
+
+        private string GetActualColName(Field field)
+        {
+            string name = this.ColNameConvetions(field);
+            int count = 0;
+
+            foreach (Field f in this.List.Fields)
+            {
+                if (f.TypeAsString != "Computed" &&
+                    name.Equals(this.ColNameConvetions(f), StringComparison.OrdinalIgnoreCase))
+                {
+                    count++;
+                }
+            }
+
+            return count > 1
+                ? this.ToPascalCase(field.InternalName, true)
+                : name;
+        }
+
+        private string ColNameConvetions(Field field)
+        {
+            var sb = new StringBuilder(this.ToPascalCase(field.Title, false));
+            string type = field.TypeAsString;
+
+            if (type == "Choice")
+                sb.Append("Value");
+            else if (type == "User" || (type == "Lookup" && !field.FromBaseType))
+                sb.Append("Id");
+
+            return sb.ToString();
         }
 
         private string ToPascalCase(string text, bool internalName)
@@ -556,6 +562,8 @@ namespace Bring.Sqlserver
             }
         }
 
+        #region Logging Methods
+
         private void LogInfo(string method, string message)
         {
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [INFO] SQLInteraction.{method}: {message}");
@@ -583,5 +591,7 @@ namespace Bring.Sqlserver
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.{method}: {message} - {ex.Message}");
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
         }
+
+        #endregion
     }
 }

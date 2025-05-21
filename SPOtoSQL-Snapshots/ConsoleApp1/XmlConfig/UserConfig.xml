@@ -1,18 +1,18 @@
 ﻿<Configuration>
 	<SharePoint>
 		<Username>Guilherme.sales@bringglobal.com</Username>
-		<Password>UtKid_3AV^r]H+</Password>
+		<Password encrypted="true">UtKid_3AV^r]H+</Password>
 	</SharePoint>
 	<SQL>
 		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=guilherme.sales;Password=fCyj765ERtg%3"!;</ConnectionString>
 	</SQL>
 	<ReplicationConfiguration>
-		<GlobalIgnoreColumns>
+		<SelectColumns>
 			<Column>ColumnName_1</Column>
-			<!-- … -->
-			<Column>ColumnName_n</Column>
-		</GlobalIgnoreColumns>
-		<SharePointLists>
+			<Column>ColumnName_2</Column>
+		</SelectColumns>
+		<!--
+		 <SharePointLists>
 			<List>
 				<SiteUrl>/sites/yoursite</SiteUrl>
 				<ListTitle>Sharepoint_List_Name</ListTitle>
@@ -31,5 +31,6 @@
 			</List>
 			<!-- Adicione mais <List> conforme necessário -->
 		</SharePointLists>
+		-->
 	</ReplicationConfiguration>
 </Configuration>

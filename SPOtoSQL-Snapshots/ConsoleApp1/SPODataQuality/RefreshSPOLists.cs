@@ -147,7 +147,7 @@ namespace Bring.SPODataQuality
 
                 using (var connection = new SqlConnection(connectionString))
                 {
-                    try // Nova verificação específica para VPN
+                    try 
                     {
                         connection.Open();
                     }
