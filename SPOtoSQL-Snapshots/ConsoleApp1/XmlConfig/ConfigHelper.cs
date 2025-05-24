@@ -92,6 +92,55 @@ namespace Bring.XmlConfig
         }
 
         /// <summary>
+        /// Gets the list of columns that should be ignored during replication.
+        /// </summary>
+        /// <returns>A HashSet of column names to ignore, or null if no columns should be ignored.</returns>
+        public static HashSet<string> GetIgnoredColumns()
+        {
+            LoadConfig();
+
+            try
+            {
+                var columnNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/GlobalIgnore/Column");
+
+                // If no ignore nodes exist, return null to indicate no columns should be ignored
+                if (columnNodes == null || columnNodes.Count == 0)
+                {
+                    Console.WriteLine("No columns configured to ignore.");
+                    return null;
+                }
+
+                // Create case-insensitive HashSet for ignored column names
+                var ignoredColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (XmlNode node in columnNodes)
+                {
+                    if (!string.IsNullOrWhiteSpace(node.InnerText))
+                    {
+                        string columnName = node.InnerText.Trim();
+                        ignoredColumns.Add(columnName);
+                        Console.WriteLine($"Added ignored column: {columnName}");
+                    }
+                }
+
+                // Return null if no valid columns were added to ignore
+                if (ignoredColumns.Count == 0)
+                {
+                    Console.WriteLine("No valid columns specified to ignore.");
+                    return null;
+                }
+
+                Console.WriteLine($"Total ignored columns: {ignoredColumns.Count}");
+                return ignoredColumns;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error reading ignored columns: {ex.Message}");
+                throw new Exception($"Error reading ignored columns configuration: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Retrieves SharePoint credentials (username and password) from the configuration file.
         /// </summary>
         /// <returns>A tuple containing the Username and Password.</returns>
