@@ -27,8 +27,9 @@ namespace Bring.Sqlserver
         public Dictionary<string, Field> FNDictionary { get; set; }
         public string CurrentTime { get; set; }
 
-        // Store selected columns from configuration
+        // Store selected and ignored columns from configuration
         private HashSet<string> SelectedColumns { get; set; }
+        private HashSet<string> IgnoredColumns { get; set; }
 
         /// <summary>
         /// Initializes the SQL table for the specified SharePoint list,
@@ -40,9 +41,12 @@ namespace Bring.Sqlserver
 
             try
             {
-                // Load selected columns from configuration
+                // Load selected and ignored columns from configuration
                 this.SelectedColumns = ConfigurationReader.GetSelectedColumns();
+                this.IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
+
                 LogInfo("Build", $"Selected columns from config: {(this.SelectedColumns == null ? "All" : string.Join(", ", this.SelectedColumns))}");
+                LogInfo("Build", $"Ignored columns from config: {(this.IgnoredColumns == null ? "None" : string.Join(", ", this.IgnoredColumns))}");
 
                 this.TableName = this.ToPascalCase(this.List.Name, false);
 
@@ -218,6 +222,7 @@ namespace Bring.Sqlserver
             LogInfo("BuildDictionary", "Building field name dictionary...");
             int processedFields = 0;
             int skippedFields = 0;
+            int ignoredFields = 0;
 
             foreach (Field field in this.List.Fields)
             {
@@ -226,6 +231,14 @@ namespace Bring.Sqlserver
                     try
                     {
                         string columnName = this.GetActualColName(field);
+
+                        // Skip if the column is in the ignored list
+                        if (this.IgnoredColumns != null && this.IgnoredColumns.Contains(columnName))
+                        {
+                            ignoredFields++;
+                            LogInfo("BuildDictionary", $"Ignored field: {columnName}");
+                            continue;
+                        }
 
                         // Only add the field if it's selected in configuration or if no specific columns are selected
                         if (this.SelectedColumns == null || this.SelectedColumns.Contains(columnName))
@@ -252,7 +265,9 @@ namespace Bring.Sqlserver
                 }
             }
 
-            LogInfo("BuildDictionary", $"Dictionary built. Processed: {processedFields}, Skipped: {skippedFields}");
+            LogInfo("BuildDictionary",
+                $"Dictionary built. Processed: {processedFields}, " +
+                $"Skipped: {skippedFields}, Ignored: {ignoredFields}");
         }
 
         private bool TableExists(string listName)
