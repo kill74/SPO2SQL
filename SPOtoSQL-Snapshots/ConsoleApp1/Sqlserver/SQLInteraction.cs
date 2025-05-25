@@ -28,8 +28,9 @@ namespace Bring.Sqlserver
         public string CurrentTime { get; set; }
 
         // Store selected and ignored columns from configuration
-        private HashSet<string> SelectedColumns { get; set; }
+        // private HashSet<string> SelectedColumns { get; set; }
         private HashSet<string> IgnoredColumns { get; set; }
+        private Dictionary<string, ColumnMapping> ColumnMappings { get; set; }
 
         /// <summary>
         /// Initializes the SQL table for the specified SharePoint list,
@@ -42,10 +43,10 @@ namespace Bring.Sqlserver
             try
             {
                 // Load selected and ignored columns from configuration
-                this.SelectedColumns = ConfigurationReader.GetSelectedColumns();
+                // this.SelectedColumns = ConfigurationReader.GetSelectedColumns();
                 this.IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
 
-                LogInfo("Build", $"Selected columns from config: {(this.SelectedColumns == null ? "All" : string.Join(", ", this.SelectedColumns))}");
+                // LogInfo("Build", $"Selected columns from config: {(this.SelectedColumns == null ? "All" : string.Join(", ", this.SelectedColumns))}");
                 LogInfo("Build", $"Ignored columns from config: {(this.IgnoredColumns == null ? "None" : string.Join(", ", this.IgnoredColumns))}");
 
                 this.TableName = this.ToPascalCase(this.List.Name, false);
@@ -224,24 +225,37 @@ namespace Bring.Sqlserver
             int skippedFields = 0;
             int ignoredFields = 0;
 
+            this.ColumnMappings = ConfigurationReader.GetSelectedColumns();
+            this.IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
+
             foreach (Field field in this.List.Fields)
             {
                 if (field.TypeAsString != "Computed")
                 {
                     try
                     {
-                        string columnName = this.GetActualColName(field);
+                        string columnName = field.InternalName;
 
-                        // Skip if the column is in the ignored list
-                        if (this.IgnoredColumns != null && this.IgnoredColumns.Contains(columnName))
+                        if (this.ColumnMappings != null && this.ColumnMappings.TryGetValue(columnName, out var mapping))
+                        {
+                            if (mapping.Ignore)
+                            {
+                                ignoredFields++;
+                                LogInfo("BuildDictionary", $"Ignored field (by mapping): {columnName}");
+                                continue;
+                            }
+                            
+                            string destinationName = mapping.Destination;
+                            this.FNDictionary.Add(this.GetKeyName(destinationName, 1), field);
+                            processedFields++;
+                            LogInfo("BuildDictionary", $"Added mapped field: {columnName} -> {destinationName}");
+                        }
+                        else if (this.IgnoredColumns != null && this.IgnoredColumns.Contains(columnName))
                         {
                             ignoredFields++;
-                            LogInfo("BuildDictionary", $"Ignored field: {columnName}");
-                            continue;
+                            LogInfo("BuildDictionary", $"Ignored field (global): {columnName}");
                         }
-
-                        // Only add the field if it's selected in configuration or if no specific columns are selected
-                        if (this.SelectedColumns == null || this.SelectedColumns.Contains(columnName))
+                        else if (this.ColumnMappings == null)
                         {
                             this.FNDictionary.Add(this.GetKeyName(columnName, 1), field);
                             processedFields++;
@@ -250,7 +264,7 @@ namespace Bring.Sqlserver
                         else
                         {
                             skippedFields++;
-                            LogInfo("BuildDictionary", $"Skipped field (not selected): {columnName}");
+                            LogInfo("BuildDictionary", $"Skipped field (not mapped): {columnName}");
                         }
                     }
                     catch (Exception ex)
@@ -258,10 +272,6 @@ namespace Bring.Sqlserver
                         skippedFields++;
                         LogError("BuildDictionary", $"Failed to process field: {field.Title}", ex);
                     }
-                }
-                else
-                {
-                    skippedFields++;
                 }
             }
 

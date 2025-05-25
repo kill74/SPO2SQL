@@ -44,45 +44,45 @@ namespace Bring.XmlConfig
         /// Gets the list of columns that should be included in the replication process.
         /// </summary>
         /// <returns>
-        /// A HashSet of column names to include, or null if all columns should be included.
+        /// A Dictionary of column mappings, or null if all columns should be included.
         /// </returns>
-        public static HashSet<string> GetSelectedColumns()
+        public static Dictionary<string, ColumnMapping> GetSelectedColumns()
         {
             LoadConfig();
 
             try
             {
-                var columnNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/SelectColumns/Column");
+                var columnNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/SelectColumns/column");
 
-                // If no column nodes exist, return null to indicate all columns should be included
                 if (columnNodes == null || columnNodes.Count == 0)
                 {
                     Console.WriteLine("No specific columns configured. All columns will be included.");
                     return null;
                 }
 
-                // Create case-insensitive HashSet for column names
-                var selectedColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var columnMappings = new Dictionary<string, ColumnMapping>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (XmlNode node in columnNodes)
                 {
-                    if (!string.IsNullOrWhiteSpace(node.InnerText))
+                    var sourceAttr = node.Attributes["source"];
+                    var destAttr = node.Attributes["destination"];
+                    var ignoreAttr = node.Attributes["ignore"];
+
+                    if (sourceAttr != null)
                     {
-                        string columnName = node.InnerText.Trim();
-                        selectedColumns.Add(columnName);
-                        Console.WriteLine($"Added selected column: {columnName}");
+                        var mapping = new ColumnMapping
+                        {
+                            Source = sourceAttr.Value,
+                            Destination = destAttr?.Value ?? sourceAttr.Value,
+                            Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value)
+                        };
+
+                        columnMappings[mapping.Source] = mapping;
+                        Console.WriteLine($"Added column mapping: {mapping.Source} -> {mapping.Destination} (Ignore: {mapping.Ignore})");
                     }
                 }
 
-                // If no valid columns were added, return null to include all columns
-                if (selectedColumns.Count == 0)
-                {
-                    Console.WriteLine("No valid columns specified. All columns will be included.");
-                    return null;
-                }
-
-                Console.WriteLine($"Total selected columns: {selectedColumns.Count}");
-                return selectedColumns;
+                return columnMappings.Count > 0 ? columnMappings : null;
             }
             catch (Exception ex)
             {
@@ -310,5 +310,12 @@ namespace Bring.XmlConfig
         public string SqlTable { get; set; }
         public bool AutoAddNewColumns { get; set; }
         public bool Disabled { get; set; }
+    }
+
+    public class ColumnMapping
+    {
+        public string Source { get; set; }
+        public string Destination { get; set; }
+        public bool Ignore { get; set; }
     }
 }
