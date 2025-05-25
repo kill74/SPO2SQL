@@ -9,12 +9,12 @@
 	<ReplicationConfiguration>
 		<!-- Put here the columns you want to replicate from SharePoint to SQL Server -->
 		<SelectColumns>
-			<Column>SerialNumber</Column>
-			<Column>BringerId</Column>
+			<column source="Title" destination="Title" ignore="false"/>
+			<column source="Memory" destination="Memory" ignore="false"/>
+			<column source="Bringer" destination="Bringer" ignore="false"/>
 		</SelectColumns>
 		<GlobalIgnore>
-			<Column>coluna1</Column>
-			<Column>coluna2</Column>
+			<!-- Put here the columns you want to ignore from SharePoint to SQL Server -->
 		</GlobalIgnore>
 	</ReplicationConfiguration>
 </Configuration>
