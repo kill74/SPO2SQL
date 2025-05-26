@@ -24,6 +24,7 @@ namespace Bring.XmlConfig
         /// <exception cref="Exception">Thrown when the configuration file cannot be loaded.</exception>
         private static void LoadConfig()
         {
+            // Lazy loading pattern - only load once
             if (_xmlDoc == null)
             {
                 try
@@ -52,17 +53,19 @@ namespace Bring.XmlConfig
 
             try
             {
-                // Primeiro verifica configurações específicas da lista
+                // List-specific configurations take precedence over global settings
                 if (!string.IsNullOrEmpty(listName))
                 {
                     var listConfigs = GetListConfigurations();
                     if (listConfigs != null && listConfigs.TryGetValue(listName, out var listConfig))
                     {
+                        // Skip ignored lists entirely
                         if (listConfig.Ignore)
                         {
                             Console.WriteLine($"List {listName} is configured to be ignored.");
                             return null;
                         }
+                        // Use list-specific column configuration if available
                         if (listConfig.Columns != null)
                         {
                             Console.WriteLine($"Using specific configuration for list: {listName}");
@@ -71,15 +74,17 @@ namespace Bring.XmlConfig
                     }
                 }
 
-                // Se não encontrar configuração específica, usa as configurações globais
+                // Fall back to global column configuration
                 var columnNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/SelectColumns/column");
 
+                // No specific columns configured = include all columns
                 if (columnNodes == null || columnNodes.Count == 0)
                 {
                     Console.WriteLine("No specific columns configured. All columns will be included.");
                     return null;
                 }
 
+                // Build case-insensitive column mappings dictionary
                 var columnMappings = new Dictionary<string, ColumnMapping>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (XmlNode node in columnNodes)
@@ -93,7 +98,7 @@ namespace Bring.XmlConfig
                         var mapping = new ColumnMapping
                         {
                             Source = sourceAttr.Value,
-                            Destination = destAttr?.Value ?? sourceAttr.Value,
+                            Destination = destAttr?.Value ?? sourceAttr.Value, // Default to source name if no destination
                             Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value)
                         };
 
@@ -257,6 +262,7 @@ namespace Bring.XmlConfig
                         Disabled = GetNodeValueBool(listNode, "Disabled", false)
                     };
 
+                    // Only add valid configurations
                     if (IsValidListConfig(config))
                     {
                         configurations.Add(config);
@@ -298,6 +304,7 @@ namespace Bring.XmlConfig
         /// </summary>
         private static bool IsValidListConfig(SharePointListConfig config)
         {
+            // All three fields are required for proper replication
             if (string.IsNullOrEmpty(config.SiteUrl))
             {
                 Console.WriteLine("Invalid configuration: SiteUrl is required.");
@@ -329,6 +336,7 @@ namespace Bring.XmlConfig
                 if (listNodes == null || listNodes.Count == 0)
                     return null;
 
+                // Case-insensitive dictionary for list name lookups
                 var listConfigs = new Dictionary<string, ListConfiguration>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (XmlNode listNode in listNodes)
@@ -344,7 +352,7 @@ namespace Bring.XmlConfig
                             Name = nameAttr.Value,
                             Context = contextAttr?.Value,
                             Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value),
-                            Columns = GetListColumns(listNode)
+                            Columns = GetListColumns(listNode) // Get list-specific column mappings
                         };
 
                         listConfigs[listConfig.Name] = listConfig;
@@ -362,6 +370,7 @@ namespace Bring.XmlConfig
 
         private static Dictionary<string, ColumnMapping> GetListColumns(XmlNode listNode)
         {
+            // Use relative XPath to find columns within this specific list
             var columnNodes = listNode.SelectNodes(".//Columns/column");
             if (columnNodes == null || columnNodes.Count == 0)
                 return null;
@@ -379,7 +388,7 @@ namespace Bring.XmlConfig
                     var mapping = new ColumnMapping
                     {
                         Source = sourceAttr.Value,
-                        Destination = destAttr?.Value ?? sourceAttr.Value,
+                        Destination = destAttr?.Value ?? sourceAttr.Value, // Default to source if no destination specified
                         Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value)
                     };
 
@@ -403,6 +412,7 @@ namespace Bring.XmlConfig
         public bool Disabled { get; set; }
     }
 
+    // Represents mapping between source and destination columns with ignore capability
     public class ColumnMapping
     {
         public string Source { get; set; }
@@ -410,6 +420,7 @@ namespace Bring.XmlConfig
         public bool Ignore { get; set; }
     }
 
+    // List-specific configuration that can override global settings
     public class ListConfiguration
     {
         public string Name { get; set; }
