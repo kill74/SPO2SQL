@@ -9,16 +9,147 @@
 	<ReplicationConfiguration>
 		 <!-- Lists configuration -->
         <Lists>
+            <!-- Technology lists -->
             <List name="devices management" context="Technology" ignore="false">
                 <Columns>
-                    <column source="Title" destination="Title" ignore="false"/>
-                    <column source="Memory" destination="Memory" ignore="false"/>
-                    <column source="Bringer" destination="Bringer" ignore="false"/>
                 </Columns>
             </List>
-            <List name="VM management" context="Technology" ignore="true">
+            <List name="VM management" context="Technology" ignore="false">
                 <Columns>
-                    <!-- specific columns for VM management -->
+                </Columns>
+            </List>
+
+            <!-- wolf lists -->
+            <List name="accounts" context="wolf" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="activities" context="wolf" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="Budget" context="wolf" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="contact" context="wolf" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="opportunities" context="wolf" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+
+            <!-- root lists -->
+            <List name="candidate experience" context="root" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="competency" context="root" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="profile" context="root" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="candidates" context="root" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="request" context="root" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="resources" context="root" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+
+            <!-- tree lists -->
+            <List name="courses" context="tree" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="my courses" context="tree" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+
+            <!-- People lists -->
+            <List name="HR Database" context="People" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+
+            <!-- selfservice lists -->
+            <List name="Timesheet" context="selfservice/timesheet" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="invoice request" context="selfservice/invoicerequest" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="Purchase Request" context="selfservice/purchaserequests" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="Travel Plan" context="selfservice/travelrequest" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="supplier invoices" context="selfservice/supplierinvoices" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="suppliers" context="selfservice/supplierinvoices" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="perdiems" context="selfservice/perdiems" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="kms" context="selfservice/kms" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="expense" context="selfservice/expenses" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+
+            <!-- seed lists -->
+            <List name="Unit" context="seed" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="Country" context="seed" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="ExchangeRate" context="seed" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="Company" context="seed" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="Business Unit" context="seed" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+            <List name="Lob" context="seed" ignore="true">
+                <Columns>
+                </Columns>
+            </List>
+
+            <!-- global lists -->
+            <List name="User Information List" context="" ignore="true">
+                <Columns>
                 </Columns>
             </List>
         </Lists>
@@ -26,9 +157,6 @@
         <!-- Global column configurations -->
         <SelectColumns>
             <!-- Default columns for all lists not specifically configured above -->
-            <column source="Title" destination="Title" ignore="false"/>
-            <column source="Memory" destination="Memory" ignore="false"/>
-            <column source="Bringer" destination="Bringer" ignore="false"/>
         </SelectColumns>
         
         <GlobalIgnore>
