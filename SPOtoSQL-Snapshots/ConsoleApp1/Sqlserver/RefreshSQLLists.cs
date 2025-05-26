@@ -71,6 +71,66 @@ namespace Bring.Sqlserver
         }
 
         /// <summary>
+        /// Initiates the update process from SharePoint to SQL Server for all configured lists.
+        /// </summary>
+        /// <param name="daily">Indicates whether to perform a daily incremental update or a full current-time refresh.</param>
+        public static void SPOtoSQLUpdateOLD(bool daily)
+        {
+            Console.WriteLine("SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
+
+            try
+            {
+                // Load SharePoint credentials from configuration (secure storage recommended)
+                var (username, password) = ConfigurationReader.GetSharePointCredentials();
+                Console.WriteLine($"SPOtoSQLUpdate: Username: {username} Password: {password}");
+
+                // Establish SharePoint user context
+                SPOUser user;
+                try
+                {
+                    user = new SPOUser(username, password);
+                }
+                catch (Exception ex)
+                {
+                    // Fail fast if authentication cannot be created
+                    Console.WriteLine("SPOtoSQLUpdate: ERROR - Failed to create SPOUser.");
+                    Console.WriteLine("Exception: " + ex.Message);
+                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    return;
+                }
+
+                // Iterate through each SharePoint list configured in AppSettings
+                foreach (string allKey in ConfigurationManager.AppSettings.AllKeys)
+                {
+                    string listName = allKey;
+                    string ctxURL = ConfigurationManager.AppSettings[allKey];
+                    Console.WriteLine($"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
+                    try
+                    {
+                        // Delegate to RefreshListsSQL for per-list processing
+                        RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log and continue on individual list errors
+                        Console.WriteLine($"SPOtoSQLUpdate: ERROR - Exception while updating list '{listName}'.");
+                        Console.WriteLine("Exception: " + ex.Message);
+                        Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Catch-all for any unexpected failure in the orchestration
+                Console.WriteLine("SPOtoSQLUpdate: FATAL ERROR - Exception during SPO to SQL update process.");
+                Console.WriteLine("Exception: " + ex.Message);
+                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+            }
+
+            Console.WriteLine("SPOtoSQLUpdate: SPO to SQL update completed.");
+        }
+
+        /// <summary>
         /// Processes a specific SharePoint list: initializes context, builds SQL interaction, and performs the data transfer.
         /// </summary>
         /// <param name="listName">The name/key of the SharePoint list.</param>
