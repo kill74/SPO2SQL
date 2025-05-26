@@ -31,6 +31,7 @@ namespace Bring.Sqlserver
         // private HashSet<string> SelectedColumns { get; set; }
         private HashSet<string> IgnoredColumns { get; set; }
         private Dictionary<string, ColumnMapping> ColumnMappings { get; set; }
+        private Dictionary<string, ColumnMapping> _columnMappings;
 
         /// <summary>
         /// Initializes the SQL table for the specified SharePoint list,

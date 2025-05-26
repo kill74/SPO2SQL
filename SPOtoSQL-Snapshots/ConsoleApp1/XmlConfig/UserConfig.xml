@@ -7,14 +7,32 @@
 		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=guilherme.sales;Password=fCyj765ERtg%3"!;</ConnectionString>
 	</SQL>
 	<ReplicationConfiguration>
-		<!-- Put here the columns you want to replicate from SharePoint to SQL Server -->
-		<SelectColumns>
-			<column source="Title" destination="Title" ignore="false"/>
-			<column source="Memory" destination="Memory" ignore="false"/>
-			<column source="Bringer" destination="Bringer" ignore="false"/>
-		</SelectColumns>
-		<GlobalIgnore>
-			<!-- Put here the columns you want to ignore from SharePoint to SQL Server -->
-		</GlobalIgnore>
+		 <!-- Lists configuration -->
+        <Lists>
+            <List name="devices management" context="Technology" ignore="false">
+                <Columns>
+                    <column source="Title" destination="Title" ignore="false"/>
+                    <column source="Memory" destination="Memory" ignore="false"/>
+                    <column source="Bringer" destination="Bringer" ignore="false"/>
+                </Columns>
+            </List>
+            <List name="VM management" context="Technology" ignore="true">
+                <Columns>
+                    <!-- specific columns for VM management -->
+                </Columns>
+            </List>
+        </Lists>
+
+        <!-- Global column configurations -->
+        <SelectColumns>
+            <!-- Default columns for all lists not specifically configured above -->
+            <column source="Title" destination="Title" ignore="false"/>
+            <column source="Memory" destination="Memory" ignore="false"/>
+            <column source="Bringer" destination="Bringer" ignore="false"/>
+        </SelectColumns>
+        
+        <GlobalIgnore>
+            <!-- Put here the columns you want to ignore from SharePoint to SQL Server -->
+        </GlobalIgnore>
 	</ReplicationConfiguration>
 </Configuration>

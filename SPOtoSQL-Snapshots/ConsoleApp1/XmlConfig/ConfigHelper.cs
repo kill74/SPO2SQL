@@ -46,12 +46,32 @@ namespace Bring.XmlConfig
         /// <returns>
         /// A Dictionary of column mappings, or null if all columns should be included.
         /// </returns>
-        public static Dictionary<string, ColumnMapping> GetSelectedColumns()
+        public static Dictionary<string, ColumnMapping> GetSelectedColumns(string listName = null)
         {
             LoadConfig();
 
             try
             {
+                // Primeiro verifica configurações específicas da lista
+                if (!string.IsNullOrEmpty(listName))
+                {
+                    var listConfigs = GetListConfigurations();
+                    if (listConfigs != null && listConfigs.TryGetValue(listName, out var listConfig))
+                    {
+                        if (listConfig.Ignore)
+                        {
+                            Console.WriteLine($"List {listName} is configured to be ignored.");
+                            return null;
+                        }
+                        if (listConfig.Columns != null)
+                        {
+                            Console.WriteLine($"Using specific configuration for list: {listName}");
+                            return listConfig.Columns;
+                        }
+                    }
+                }
+
+                // Se não encontrar configuração específica, usa as configurações globais
                 var columnNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/SelectColumns/column");
 
                 if (columnNodes == null || columnNodes.Count == 0)
@@ -298,6 +318,77 @@ namespace Bring.XmlConfig
 
             return true;
         }
+
+        public static Dictionary<string, ListConfiguration> GetListConfigurations()
+        {
+            LoadConfig();
+
+            try
+            {
+                var listNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/Lists/List");
+                if (listNodes == null || listNodes.Count == 0)
+                    return null;
+
+                var listConfigs = new Dictionary<string, ListConfiguration>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (XmlNode listNode in listNodes)
+                {
+                    var nameAttr = listNode.Attributes["name"];
+                    var contextAttr = listNode.Attributes["context"];
+                    var ignoreAttr = listNode.Attributes["ignore"];
+
+                    if (nameAttr != null)
+                    {
+                        var listConfig = new ListConfiguration
+                        {
+                            Name = nameAttr.Value,
+                            Context = contextAttr?.Value,
+                            Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value),
+                            Columns = GetListColumns(listNode)
+                        };
+
+                        listConfigs[listConfig.Name] = listConfig;
+                    }
+                }
+
+                return listConfigs.Count > 0 ? listConfigs : null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error reading list configurations: {ex.Message}");
+                throw;
+            }
+        }
+
+        private static Dictionary<string, ColumnMapping> GetListColumns(XmlNode listNode)
+        {
+            var columnNodes = listNode.SelectNodes(".//Columns/column");
+            if (columnNodes == null || columnNodes.Count == 0)
+                return null;
+
+            var columnMappings = new Dictionary<string, ColumnMapping>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (XmlNode node in columnNodes)
+            {
+                var sourceAttr = node.Attributes["source"];
+                var destAttr = node.Attributes["destination"];
+                var ignoreAttr = node.Attributes["ignore"];
+
+                if (sourceAttr != null)
+                {
+                    var mapping = new ColumnMapping
+                    {
+                        Source = sourceAttr.Value,
+                        Destination = destAttr?.Value ?? sourceAttr.Value,
+                        Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value)
+                    };
+
+                    columnMappings[mapping.Source] = mapping;
+                }
+            }
+
+            return columnMappings.Count > 0 ? columnMappings : null;
+        }
     }
 
     /// <summary>
@@ -317,5 +408,13 @@ namespace Bring.XmlConfig
         public string Source { get; set; }
         public string Destination { get; set; }
         public bool Ignore { get; set; }
+    }
+
+    public class ListConfiguration
+    {
+        public string Name { get; set; }
+        public string Context { get; set; }
+        public bool Ignore { get; set; }
+        public Dictionary<string, ColumnMapping> Columns { get; set; }
     }
 }
