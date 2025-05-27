@@ -226,7 +226,8 @@ namespace Bring.Sqlserver
             int skippedFields = 0;
             int ignoredFields = 0;
 
-            this.ColumnMappings = ConfigurationReader.GetSelectedColumns();
+            // Use o nome da lista para buscar os campos específicos no UserConfig.xml
+            this.ColumnMappings = ConfigurationReader.GetSelectedColumns(this.List.Name);
             this.IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
 
             foreach (Field field in this.List.Fields)
@@ -237,35 +238,40 @@ namespace Bring.Sqlserver
                     {
                         string columnName = field.InternalName;
 
-                        if (this.ColumnMappings != null && this.ColumnMappings.TryGetValue(columnName, out var mapping))
+                        // Se houver mapeamento de colunas, só processa as que estão no mapeamento e não estão ignoradas
+                        if (this.ColumnMappings != null)
                         {
-                            if (mapping.Ignore)
+                            if (this.ColumnMappings.TryGetValue(columnName, out var mapping))
                             {
-                                ignoredFields++;
-                                LogInfo("BuildDictionary", $"Ignored field (by mapping): {columnName}");
-                                continue;
+                                if (mapping.Ignore)
+                                {
+                                    ignoredFields++;
+                                    LogInfo("BuildDictionary", $"Ignored field (by mapping): {columnName}");
+                                    continue;
+                                }
+
+                                string destinationName = mapping.Destination;
+                                this.FNDictionary.Add(this.GetKeyName(destinationName, 1), field);
+                                processedFields++;
+                                LogInfo("BuildDictionary", $"Added mapped field: {columnName} -> {destinationName}");
                             }
-                            
-                            string destinationName = mapping.Destination;
-                            this.FNDictionary.Add(this.GetKeyName(destinationName, 1), field);
-                            processedFields++;
-                            LogInfo("BuildDictionary", $"Added mapped field: {columnName} -> {destinationName}");
+                            else
+                            {
+                                skippedFields++;
+                                LogInfo("BuildDictionary", $"Skipped field (not mapped): {columnName}");
+                            }
                         }
+                        // Se não houver mapeamento, processa todos (comportamento padrão)
                         else if (this.IgnoredColumns != null && this.IgnoredColumns.Contains(columnName))
                         {
                             ignoredFields++;
                             LogInfo("BuildDictionary", $"Ignored field (global): {columnName}");
                         }
-                        else if (this.ColumnMappings == null)
+                        else
                         {
                             this.FNDictionary.Add(this.GetKeyName(columnName, 1), field);
                             processedFields++;
                             LogInfo("BuildDictionary", $"Added field: {columnName}");
-                        }
-                        else
-                        {
-                            skippedFields++;
-                            LogInfo("BuildDictionary", $"Skipped field (not mapped): {columnName}");
                         }
                     }
                     catch (Exception ex)
