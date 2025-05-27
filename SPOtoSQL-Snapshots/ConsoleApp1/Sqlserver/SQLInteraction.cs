@@ -344,16 +344,17 @@ namespace Bring.Sqlserver
                 try
                 {
                     string sqlType = this.SQLFieldType(fn.Value);
-                    string baseType = sqlType.Substring(sqlType.IndexOf('[') + 1,
-                                                      sqlType.LastIndexOf(']') - sqlType.IndexOf('[') - 1);
                     string colName = fn.Key;
 
+                    // Verifica se a coluna já existe na tabela
                     this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
                     if ((int)this.Command.ExecuteScalar() == 0)
                     {
-                        this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ADD [{colName}] {sqlType}";
+                        // Se não existe, cria a coluna automaticamente
+                        this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ADD [{colName}] {sqlType} NULL";
                         this.Command.ExecuteNonQuery();
                         updatedColumns++;
+                        LogInfo("UpdateTableDesign", $"Column '{colName}' created automatically.");
                     }
                 }
                 catch (Exception ex)

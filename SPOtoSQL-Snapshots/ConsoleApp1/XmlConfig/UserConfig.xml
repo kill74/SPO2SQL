@@ -12,7 +12,7 @@
             <!-- Technology lists -->
             <List name="devices management" context="Technology" ignore="false">
                 <Columns>
-					<column source="Bringer" destination="Bringer1" ignore="true"/>
+					<column source="Bringer" destination="Bringer"/>
 					<column source="Title" destination="Title" />
                 </Columns>
             </List>
@@ -167,3 +167,8 @@
         </GlobalIgnore>
 	</ReplicationConfiguration>
 </Configuration>
+<!--
+    To synchronize all fields of a list, leave <Columns> empty or remove the tag.
+    To synchronize only specific fields, add <column source="..." destination="..."/> inside <Columns>.
+    To ignore a list, use ignore="true".
+-->
