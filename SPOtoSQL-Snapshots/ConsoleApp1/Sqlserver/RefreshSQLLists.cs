@@ -40,22 +40,28 @@ namespace Bring.Sqlserver
                 }
 
                 // Iterate through each SharePoint list configured in AppSettings
-                foreach (string allKey in ConfigurationManager.AppSettings.AllKeys)
+                var listConfigs = ConfigurationReader.GetListConfigurations();
+                if (listConfigs != null)
                 {
-                    string listName = allKey;
-                    string ctxURL = ConfigurationManager.AppSettings[allKey];
-                    Console.WriteLine($"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
-                    try
+                    foreach (var kvp in listConfigs)
                     {
-                        // Delegate to RefreshListsSQL for per-list processing
-                        RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log and continue on individual list errors
-                        Console.WriteLine($"SPOtoSQLUpdate: ERROR - Exception while updating list '{listName}'.");
-                        Console.WriteLine("Exception: " + ex.Message);
-                        Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                        var listName = kvp.Key;
+                        var config = kvp.Value;
+                        if (config.Ignore) continue; // Ignores the list if "ignore="true""
+
+                        string ctxURL = config.Context;
+                        Console.WriteLine($"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
+                        try
+                        {
+                            RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Log and continue on individual list errors
+                            Console.WriteLine($"SPOtoSQLUpdate: ERROR - Exception while updating list '{listName}'.");
+                            Console.WriteLine("Exception: " + ex.Message);
+                            Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                        }
                     }
                 }
             }
@@ -70,6 +76,7 @@ namespace Bring.Sqlserver
             Console.WriteLine("SPOtoSQLUpdate: SPO to SQL update completed.");
         }
 
+        /*
         /// <summary>
         /// Initiates the update process from SharePoint to SQL Server for all configured lists.
         /// </summary>
@@ -129,6 +136,7 @@ namespace Bring.Sqlserver
 
             Console.WriteLine("SPOtoSQLUpdate: SPO to SQL update completed.");
         }
+        */
 
         /// <summary>
         /// Processes a specific SharePoint list: initializes context, builds SQL interaction, and performs the data transfer.

@@ -12,9 +12,11 @@
             <!-- Technology lists -->
             <List name="devices management" context="Technology" ignore="false">
                 <Columns>
+					<column source="Bringer" destination="Bringer1" ignore="true"/>
+					<column source="Title" destination="Title" />
                 </Columns>
             </List>
-            <List name="VM management" context="Technology" ignore="false">
+            <List name="VM management" context="Technology" ignore="true">
                 <Columns>
                 </Columns>
             </List>
@@ -148,10 +150,11 @@
             </List>
 
             <!-- global lists -->
-            <List name="User Information List" context="" ignore="true">
+            <!-- <List name="User Information" context="" ignore="true"> 
                 <Columns>
                 </Columns>
             </List>
+			-->
         </Lists>
 
         <!-- Global column configurations -->
