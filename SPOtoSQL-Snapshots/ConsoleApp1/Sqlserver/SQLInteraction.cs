@@ -625,6 +625,11 @@ namespace Bring.Sqlserver
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
         }
 
+        private void LogVerbose(string method, string message)
+        {
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [VERBOSE] SQLInteraction.{method}: {message}");
+        }
+
         #endregion
     }
 }
