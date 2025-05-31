@@ -14,6 +14,19 @@ namespace Bring.SPODataQuality
         // Main entry point of the application, executed when the program starts
         private static void Main(string[] args)
         {
+            string configPath = "SPO_to_SQL_config.xml"; // Default path for the configuration file
+
+            foreach (var arg in args)
+            {
+                if (arg.StartsWith("--config="))
+                {
+                    configPath = arg.Substring("--config=".Length);
+                }
+            }
+
+            // 2. Configure o caminho do XML antes de qualquer uso do ConfigurationReader
+            Bring.XmlConfig.ConfigurationReader.SetConfigPath(configPath);
+
             try
             {
                 Console.WriteLine("DEBUG: Starting Main");

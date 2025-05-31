@@ -13,7 +13,7 @@
             <!-- Technology lists -->
             <List name="devices management" sharepointlist="Technology" ignore="false">
                 <Columns>
-					<column source="Bringer" destination="Bringer"/>
+					<column source="Bringer" destination="Bringer" datatype="nvarchar(255)"/>
 					<column source="Title" destination="Title" />
                 </Columns>
             </List>

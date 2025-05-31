@@ -49,7 +49,7 @@ namespace Bring.Sqlserver
                         var config = kvp.Value;
                         if (config.Ignore) continue; // Ignores the list if "ignore="true\""
 
-                        string ctxURL = config.Context;
+                        string ctxURL = config.SharepointList;
                         Console.WriteLine($"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
                         try
                         {

@@ -312,7 +312,13 @@ namespace Bring.Sqlserver
 
             foreach (var fn in this.FNDictionary)
             {
-                string sqlType = this.SQLFieldType(fn.Value);
+                string sqlType = null;
+                // Verifica se há DataType definido no mapeamento
+                if (this.ColumnMappings != null && this.ColumnMappings.TryGetValue(fn.Value.InternalName, out var mapping) && !string.IsNullOrEmpty(mapping.DataType))
+                    sqlType = mapping.DataType;
+                else
+                    sqlType = this.SQLFieldType(fn.Value);
+
                 if (sqlType != null)
                     stringBuilder.AppendLine($"[{fn.Key}] {sqlType} NULL,");
             }
@@ -343,18 +349,20 @@ namespace Bring.Sqlserver
             {
                 try
                 {
-                    string sqlType = this.SQLFieldType(fn.Value);
+                    string sqlType = null;
+                    if (this.ColumnMappings != null && this.ColumnMappings.TryGetValue(fn.Value.InternalName, out var mapping) && !string.IsNullOrEmpty(mapping.DataType))
+                        sqlType = mapping.DataType;
+                    else
+                        sqlType = this.SQLFieldType(fn.Value);
+
                     string colName = fn.Key;
 
-                    // Verifica se a coluna já existe na tabela
                     this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
                     if ((int)this.Command.ExecuteScalar() == 0)
                     {
-                        // Se não existe, cria a coluna automaticamente
                         this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ADD [{colName}] {sqlType} NULL";
                         this.Command.ExecuteNonQuery();
                         updatedColumns++;
-                        LogInfo("UpdateTableDesign", $"Column '{colName}' created automatically.");
                     }
                 }
                 catch (Exception ex)
