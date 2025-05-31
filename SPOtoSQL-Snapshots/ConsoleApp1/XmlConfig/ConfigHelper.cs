@@ -9,13 +9,16 @@ namespace Bring.XmlConfig
     /// Provides methods to read SharePoint credentials, SQL connection strings, 
     /// and configuration settings from an XML configuration file.
     /// </summary>
-    public class ConfigurationReader
+    public static class ConfigurationReader
     {
-        // Path to the XML configuration file relative to application root
-        private static readonly string CONFIG_PATH = "XmlConfig/UserConfig.xml";
-
-        // Singleton XmlDocument instance, loaded on first access
+        private static string _configPath = "SPO_to_SQL_config.xml"; // valor padrão
         private static XmlDocument _xmlDoc;
+
+        public static void SetConfigPath(string path)
+        {
+            _configPath = path;
+            _xmlDoc = null; // força recarregar se já estava carregado
+        }
 
         /// <summary>
         /// Loads the XML configuration document if it hasn't been loaded yet.
@@ -30,8 +33,8 @@ namespace Bring.XmlConfig
                 try
                 {
                     _xmlDoc = new XmlDocument();
-                    _xmlDoc.Load(CONFIG_PATH);
-                    Console.WriteLine("Configuration file loaded successfully.");
+                    _xmlDoc.Load(_configPath);
+                    Console.WriteLine($"Configuration file loaded successfully from {_configPath}.");
                 }
                 catch (Exception ex)
                 {
@@ -342,7 +345,7 @@ namespace Bring.XmlConfig
                 foreach (XmlNode listNode in listNodes)
                 {
                     var nameAttr = listNode.Attributes["name"];
-                    var contextAttr = listNode.Attributes["context"];
+                    var contextAttr = listNode.Attributes["sharepointlist"];
                     var ignoreAttr = listNode.Attributes["ignore"];
 
                     if (nameAttr != null)
@@ -350,7 +353,7 @@ namespace Bring.XmlConfig
                         var listConfig = new ListConfiguration
                         {
                             Name = nameAttr.Value,
-                            Context = contextAttr?.Value,
+                            SharepointList = contextAttr?.Value,
                             Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value),
                             Columns = GetListColumns(listNode) // Get list-specific column mappings
                         };
@@ -370,7 +373,6 @@ namespace Bring.XmlConfig
 
         private static Dictionary<string, ColumnMapping> GetListColumns(XmlNode listNode)
         {
-            // Use relative XPath to find columns within this specific list
             var columnNodes = listNode.SelectNodes(".//Columns/column");
             if (columnNodes == null || columnNodes.Count == 0)
                 return null;
@@ -382,14 +384,16 @@ namespace Bring.XmlConfig
                 var sourceAttr = node.Attributes["source"];
                 var destAttr = node.Attributes["destination"];
                 var ignoreAttr = node.Attributes["ignore"];
+                var datatypeAttr = node.Attributes["datatype"]; 
 
                 if (sourceAttr != null)
                 {
                     var mapping = new ColumnMapping
                     {
                         Source = sourceAttr.Value,
-                        Destination = destAttr?.Value ?? sourceAttr.Value, // Default to source if no destination specified
-                        Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value)
+                        Destination = destAttr?.Value ?? sourceAttr.Value,
+                        Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value),
+                        DataType = datatypeAttr?.Value 
                     };
 
                     columnMappings[mapping.Source] = mapping;
@@ -418,13 +422,14 @@ namespace Bring.XmlConfig
         public string Source { get; set; }
         public string Destination { get; set; }
         public bool Ignore { get; set; }
+        public string DataType { get; set; } 
     }
 
     // List-specific configuration that can override global settings
     public class ListConfiguration
     {
         public string Name { get; set; }
-        public string Context { get; set; }
+        public string SharepointList { get; set; }
         public bool Ignore { get; set; }
         public Dictionary<string, ColumnMapping> Columns { get; set; }
     }
