@@ -1,5 +1,6 @@
 ﻿using Bring.Sharepoint;
 using Bring.XmlConfig;
+using Bring.SPODataQuality;
 using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;

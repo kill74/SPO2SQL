@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Xml;
+using Bring.SPODataQuality;
 using System.Linq;
 
 namespace Bring.XmlConfig

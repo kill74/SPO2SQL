@@ -1,6 +1,7 @@
 ﻿using Bring.Sharepoint;
 using Bring.Sqlserver;
 using Bring.XmlConfig;
+using Bring.SPODataQuality;
 using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
@@ -17,15 +18,31 @@ namespace Bring.SPODataQuality
             Console.WriteLine("DEBUG: Usig the Default config");
             string configPath = "XmlConfig\\UserConfig.xml"; // Default path for the configuration file
 
+            int verbose = 0;
+            bool diagnostic = false;
+
             foreach (var arg in args)
             {
                 if (arg.StartsWith("--config="))
                 {
                     configPath = arg.Substring("--config=".Length);
                 }
+                else if (arg.StartsWith("--verbose="))
+                {
+                    if (int.TryParse(arg.Substring("--verbose=".Length), out int v) && v >= 0 && v <= 3)
+                        verbose = v;
+                }
+                else if (arg.ToLower() == "diagnostic")
+                {
+                    diagnostic = true;
+                }
             }
 
-            // 2. Configure o caminho do XML antes de qualquer uso do ConfigurationReader
+            if (diagnostic && verbose == 0)
+                verbose = 1;
+
+            Logger.VerboseLevel = verbose;
+
             Bring.XmlConfig.ConfigurationReader.SetConfigPath(configPath);
 
             try
