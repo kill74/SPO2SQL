@@ -95,6 +95,7 @@
 		<Compile Include="Sharepoint\SPOUser.cs" />
 		<Compile Include="Sharepoint\TimesheetDQ.cs" />
 		<Compile Include="XmlConfig\ConfigHelper.cs" />
+		<Compile Include="ConsoleLogger\Logger.cs" />
 		<Compile Include="AssemblyInfo.cs" />
 	</ItemGroup>
 	<ItemGroup>

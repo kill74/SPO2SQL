@@ -10,7 +10,6 @@
 		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=xxx;Password=xxx;</ConnectionString>
 	</SQL>
 	<ReplicationConfiguration>
-		 <!-- trocar nome de context para sharepointlist -->
 		 <!-- Lists configuration -->
         <Lists>
             <!-- Technology lists -->
