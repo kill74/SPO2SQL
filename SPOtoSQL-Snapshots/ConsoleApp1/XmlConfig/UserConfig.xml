@@ -1,5 +1,4 @@
-﻿<!-- use ConsoleApp1.exe --config=XmlConfig\UserConfig.xml --verbose=2 -->
-
+﻿
 <Configuration>
 	<SharePoint>
 
@@ -178,4 +177,6 @@
     To synchronize all fields of a list, leave <Columns> empty or remove the tag.
     To synchronize only specific fields, add <column source="..." destination="..."/> inside <Columns>.
     To ignore a list, use ignore="true".
+	
 -->
+
