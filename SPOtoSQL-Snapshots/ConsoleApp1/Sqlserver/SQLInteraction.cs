@@ -31,8 +31,8 @@ namespace Bring.Sqlserver
         // Store selected and ignored columns from configuration
         // private HashSet<string> SelectedColumns { get; set; }
         private HashSet<string> IgnoredColumns { get; set; }
-        private Dictionary<string, ColumnMapping> ColumnMappings { get; set; }
-        private Dictionary<string, ColumnMapping> _columnMappings;
+        public Dictionary<string, ColumnMapping> ColumnMappings { get; set; }
+        //private Dictionary<string, ColumnMapping> _columnMappings;
 
         /// <summary>
         /// Initializes the SQL table for the specified SharePoint list,
@@ -40,7 +40,7 @@ namespace Bring.Sqlserver
         /// </summary>
         public void Build()
         {
-            Logger.Log(1, "[Build]", $"Starting SQL build process for list: {this.List?.Name ?? "null"}");
+            Logger.Log(1, "[Build] Starting SQL build process for list: " + (this.List?.Name ?? "null"));
 
             try
             {
@@ -48,14 +48,14 @@ namespace Bring.Sqlserver
                 // this.SelectedColumns = ConfigurationReader.GetSelectedColumns();
                 this.IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
 
-                Logger.Log(1, "[Build]", $"Ignored columns from config: {(this.IgnoredColumns == null ? "None" : string.Join(", ", this.IgnoredColumns))}");
+                Logger.Log(1, "[Build] Ignored columns from config: " + (this.IgnoredColumns == null ? "None" : string.Join(", ", this.IgnoredColumns)));
 
                 this.TableName = this.ToPascalCase(this.List.Name, false);
 
                 try
                 {
                     this.Connection = new SqlConnection(ConfigurationReader.GetSqlConnectionString());
-                    Logger.Log(1, "Build", "Establishing SQL connection...");
+                    Logger.Log(1, "[Build] Establishing SQL connection...");
                     this.Connection.Open();
                 }
                 catch (SqlException ex)
@@ -70,7 +70,7 @@ namespace Bring.Sqlserver
 
                 try
                 {
-                    Logger.Log(1, "[Build]", "Initializing SharePoint list structure...");
+                    Logger.Log(1, "[Build] Initializing SharePoint list structure...");
                     this.List.Build();
                 }
                 catch (Exception ex)
@@ -83,7 +83,7 @@ namespace Bring.Sqlserver
                 try
                 {
                     this.FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
-                    Logger.Log(1, "[Build]", "Building field dictionary...");
+                    Logger.Log(1, "[Build] Building field dictionary...");
                     this.BuildDictionary();
                 }
                 catch (Exception ex)
@@ -97,12 +97,12 @@ namespace Bring.Sqlserver
                 {
                     if (!this.TableExists(this.TableName))
                     {
-                        Logger.Log(1, "[Build]", $"Creating new table: {this.TableName}");
+                        Logger.Log(1, "[Build] Creating new table: " + this.TableName);
                         this.CreateTable();
                     }
                     else
                     {
-                        Logger.Log(1, "[Build]", $"Updating existing table: {this.TableName}");
+                        Logger.Log(1, "[Build] Updating existing table: " + this.TableName);
                         this.UpdateTableDesign();
                     }
                 }
@@ -128,7 +128,7 @@ namespace Bring.Sqlserver
         {
             try
             {
-                Logger.Log(2, "[DailyUpdate]", $"Starting daily update for table: {this.TableName}"); // ver isto
+                Logger.Log(2, "[DailyUpdate] Starting daily update for table " + this.TableName);
 
                 try
                 {
@@ -161,7 +161,7 @@ namespace Bring.Sqlserver
                 try
                 {
                     this.Transaction.Commit();
-                    Logger.Log(2, "[DailyUpdate]", "Transaction committed successfully");
+                    Logger.Log(2, "[DailyUpdate] Transaction committed successfully");
                 }
                 catch (Exception ex)
                 {
@@ -184,7 +184,7 @@ namespace Bring.Sqlserver
         {
             try
             {
-                Logger.Log(2, "[CurrentTimeUpdate]", $"Starting current-time update for: {this.TableName}"); // ver isto
+                Logger.Log(2, "[CurrentTimeUpdate] Starting current-time update for " + this.TableName);
 
                 try
                 {
@@ -253,19 +253,19 @@ namespace Bring.Sqlserver
                                 if (mapping.Ignore)
                                 {
                                     ignoredFields++;
-                                    Logger.Log(1, "[BuildDictionary] Ignored field (by mapping): {columnName}");
+                                    Logger.Log(1, "[BuildDictionary] Ignored field (by mapping) " + columnName);
                                     continue;
                                 }
 
                                 string destinationName = mapping.Destination;
                                 this.FNDictionary.Add(this.GetKeyName(destinationName, 1), field);
                                 processedFields++;
-                                Logger.Log(1, "[BuildDictionary] Added mapped field: {columnName} -> {destinationName}");
+                                Logger.Log(1, "[BuildDictionary] Added mapped field " + columnName + " -> " + destinationName);
                             }
                             else
                             {
                                 skippedFields++;
-                                Logger.Log(1, "[BuildDictionary] Skipped field (not mapped): {columnName}");
+                                Logger.Log(1, "[BuildDictionary] Skipped field (not mapped) " + columnName);
                             }
                         }
                         // Se não houver mapeamento, processa todos (comportamento padrão)
@@ -298,7 +298,7 @@ namespace Bring.Sqlserver
             {
                 this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{listName}'";
                 bool exists = (int)this.Command.ExecuteScalar() != 0;
-                Logger.Log(1, "[TableExists]", $"Table '{listName}' exists: {exists}");
+                Logger.Log(1, $"[TableExists] Table '{listName}' exists: {exists}");
                 return exists;
             }
             catch (Exception ex)
@@ -456,7 +456,7 @@ namespace Bring.Sqlserver
                 }
             }
 
-            Logger.Log(1, "[TransferData]", $"Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
+            Logger.Log(1, $"[TransferData] Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
         }
 
         private string SQLFieldType(Field field)
@@ -495,7 +495,7 @@ namespace Bring.Sqlserver
                         ? "[nvarchar](MAX)"
                         : "[int]";
                 default:
-                    Logger.Log(1, "[SQLFieldType]", $"Unknown field type encountered - Field: {field.Title}, Type: {field.TypeAsString}");
+                    Logger.Log(1, $"[SQLFieldType] Unknown field type encountered - Field: {field.Title}, Type: {field.TypeAsString}");
                     return null;
             }
         }
@@ -513,14 +513,14 @@ namespace Bring.Sqlserver
 
         private void UpdateMetadata()
         {
-            Logger.Log(1, "[UpdateMetadata]", $"Updating metadata for table: {this.TableName}");
+            Logger.Log(1, $"[UpdateMetadata] Updating metadata for table: {this.TableName}");
             try
             {
                 this.Command.CommandText = $"DELETE FROM Metadata WHERE TableName = '{this.TableName}'";
                 this.Command.ExecuteNonQuery();
                 this.Command.CommandText = $"INSERT INTO Metadata (TableName, LastRefreshDate) VALUES ('{this.TableName}', '{this.CurrentTime}')";
                 this.Command.ExecuteNonQuery();
-                Logger.Log(1, "[UpdateMetadata]", "Metadata updated successfully");
+                Logger.Log(1, $"[UpdateMetadata] Metadata updated successfully");
             }
             catch (Exception ex)
             {
@@ -612,7 +612,7 @@ namespace Bring.Sqlserver
 
         private void LogInfo(string method, string message)
         {
-            Logger.Log(1, $"SQLInteraction.{method}", message);
+            Logger.Log(1, $"SQLInteraction.{method}: {message}");
         }
 
         private void LogError(string method, string message, Exception ex, bool includeStack = false)
@@ -624,12 +624,12 @@ namespace Bring.Sqlserver
 
         private void LogWarning(string method, string message)
         {
-            Logger.Log(1, $"SQLInteraction.{method}", message);
+            Logger.Log(1, $"SQLInteraction.{method}: {message}");
         }
 
         private void LogDebug(string method, string message)
         {
-            Logger.Log(1, $"SQLInteraction.{method}", message);
+            Logger.Log(1, $"SQLInteraction.{method}: {message}");
         }
 
         private void LogFatal(string method, string message, Exception ex)
@@ -640,7 +640,7 @@ namespace Bring.Sqlserver
 
         private void LogVerbose(string method, string message)
         {
-            Logger.Log(1, $"SQLInteraction.{method}", message);
+            Logger.Log(1, $"SQLInteraction.{method}: {message}");
         }
 
         #endregion
