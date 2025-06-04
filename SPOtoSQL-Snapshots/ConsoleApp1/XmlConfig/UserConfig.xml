@@ -1,4 +1,6 @@
-﻿<Configuration>
+﻿<!-- use ConsoleApp1.exe --config=XmlConfig\UserConfig.xml --verbose=2 -->
+
+<Configuration>
 	<SharePoint>
 
 				<ClientId>a78f0b66-774b-4d19-aed1-a444ae3911d7</ClientId>

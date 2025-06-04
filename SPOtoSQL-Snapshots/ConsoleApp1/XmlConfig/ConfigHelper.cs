@@ -35,12 +35,12 @@ namespace Bring.XmlConfig
                 {
                     _xmlDoc = new XmlDocument();
                     _xmlDoc.Load(_configPath);
-                    Console.WriteLine($"Configuration file loaded successfully from {_configPath}.");
+                    Logger.Log(2, "Configuration file loaded successfully from " + _configPath);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to load configuration file: {ex.Message}");
-                    throw new Exception($"Error loading configuration file: {ex.Message}");
+                    Console.WriteLine("Failed to load configuration file: " + ex.Message);
+                    throw new Exception("Error loading configuration file: " + ex.Message);
                 }
             }
         }
@@ -66,13 +66,13 @@ namespace Bring.XmlConfig
                         // Skip ignored lists entirely
                         if (listConfig.Ignore)
                         {
-                            Console.WriteLine($"List {listName} is configured to be ignored.");
+                            Logger.Log(2, "List " + listName + " is configured to be ignored.");
                             return null;
                         }
                         // Use list-specific column configuration if available
                         if (listConfig.Columns != null)
                         {
-                            Console.WriteLine($"Using specific configuration for list: {listName}");
+                            Logger.Log(1, "Using specific configuration for list: " + listName);
                             return listConfig.Columns;
                         }
                     }
@@ -84,7 +84,7 @@ namespace Bring.XmlConfig
                 // No specific columns configured = include all columns
                 if (columnNodes == null || columnNodes.Count == 0)
                 {
-                    Console.WriteLine("No specific columns configured. All columns will be included.");
+                    Logger.Log(2, "No specific columns configured. All columns will be included.");
                     return null;
                 }
 
@@ -107,7 +107,7 @@ namespace Bring.XmlConfig
                         };
 
                         columnMappings[mapping.Source] = mapping;
-                        Console.WriteLine($"Added column mapping: {mapping.Source} -> {mapping.Destination} (Ignore: {mapping.Ignore})");
+                        Logger.Log(1, "Added column mapping: " + mapping.Source + " -> " + mapping.Destination + " (Ignore: " + mapping.Ignore + ")");
                     }
                 }
 
@@ -115,8 +115,8 @@ namespace Bring.XmlConfig
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error reading selected columns: {ex.Message}");
-                throw new Exception($"Error reading selected columns configuration: {ex.Message}");
+                Console.WriteLine("Error reading selected columns: " + ex.Message);
+                throw new Exception("Error reading selected columns configuration: " + ex.Message);
             }
         }
 
@@ -135,7 +135,7 @@ namespace Bring.XmlConfig
                 // If no ignore nodes exist, return null to indicate no columns should be ignored
                 if (columnNodes == null || columnNodes.Count == 0)
                 {
-                    Console.WriteLine("No columns configured to ignore.");
+                    Logger.Log(2, "No columns configured to ignore.");
                     return null;
                 }
 
@@ -148,24 +148,24 @@ namespace Bring.XmlConfig
                     {
                         string columnName = node.InnerText.Trim();
                         ignoredColumns.Add(columnName);
-                        Console.WriteLine($"Added ignored column: {columnName}");
+                        Logger.Log(1, "Added ignored column: " + columnName);
                     }
                 }
 
                 // Return null if no valid columns were added to ignore
                 if (ignoredColumns.Count == 0)
                 {
-                    Console.WriteLine("No valid columns specified to ignore.");
+                    Logger.Log(2, "No valid columns specified to ignore.");
                     return null;
                 }
 
-                Console.WriteLine($"Total ignored columns: {ignoredColumns.Count}");
+                Logger.Log(2, "Total ignored columns: " + ignoredColumns.Count);
                 return ignoredColumns;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error reading ignored columns: {ex.Message}");
-                throw new Exception($"Error reading ignored columns configuration: {ex.Message}");
+                Console.WriteLine("Error reading ignored columns: " + ex.Message);
+                throw new Exception("Error reading ignored columns configuration: " + ex.Message);
             }
         }
 
@@ -197,12 +197,12 @@ namespace Bring.XmlConfig
                 if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
                     throw new Exception("Username or Password cannot be empty.");
 
-                Console.WriteLine("SharePoint credentials retrieved successfully.");
+                Logger.Log(2, "SharePoint credentials retrieved successfully.");
                 return (username, password);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error retrieving SharePoint credentials: {ex.Message}");
+                Console.WriteLine("Error retrieving SharePoint credentials: " + ex.Message);
                 throw new Exception("Failed to retrieve SharePoint credentials.", ex);
             }
         }
@@ -226,12 +226,12 @@ namespace Bring.XmlConfig
                 if (string.IsNullOrEmpty(connectionString))
                     throw new Exception("SQL connection string cannot be empty.");
 
-                Console.WriteLine("SQL connection string retrieved successfully.");
+                Logger.Log(2, "SQL connection string retrieved successfully.");
                 return connectionString;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error retrieving SQL connection string: {ex.Message}");
+                Console.WriteLine("Error retrieving SQL connection string: " + ex.Message);
                 throw new Exception("Failed to retrieve SQL connection string.", ex);
             }
         }
@@ -249,7 +249,7 @@ namespace Bring.XmlConfig
                 var listNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/SharePointLists/List");
                 if (listNodes == null || listNodes.Count == 0)
                 {
-                    Console.WriteLine("No SharePoint list configurations found.");
+                    Logger.Log(2, "No SharePoint list configurations found.");
                     return Enumerable.Empty<SharePointListConfig>();
                 }
 
@@ -270,7 +270,7 @@ namespace Bring.XmlConfig
                     if (IsValidListConfig(config))
                     {
                         configurations.Add(config);
-                        Console.WriteLine($"Loaded configuration for list: {config.ListTitle}");
+                        Logger.Log(1, "Loaded configuration for list: " + config.ListTitle);
                     }
                 }
 
@@ -278,7 +278,7 @@ namespace Bring.XmlConfig
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error reading SharePoint list configurations: {ex.Message}");
+                Console.WriteLine("Error reading SharePoint list configurations: " + ex.Message);
                 throw new Exception("Failed to read SharePoint list configurations.", ex);
             }
         }
@@ -311,19 +311,19 @@ namespace Bring.XmlConfig
             // All three fields are required for proper replication
             if (string.IsNullOrEmpty(config.SiteUrl))
             {
-                Console.WriteLine("Invalid configuration: SiteUrl is required.");
+                Logger.Log(1, "Invalid configuration: SiteUrl is required.");
                 return false;
             }
 
             if (string.IsNullOrEmpty(config.ListTitle))
             {
-                Console.WriteLine("Invalid configuration: ListTitle is required.");
+                Logger.Log(1, "Invalid configuration: ListTitle is required.");
                 return false;
             }
 
             if (string.IsNullOrEmpty(config.SqlTable))
             {
-                Console.WriteLine("Invalid configuration: SqlTable is required.");
+                Logger.Log(1, "Invalid configuration: SqlTable is required.");
                 return false;
             }
 
@@ -367,7 +367,7 @@ namespace Bring.XmlConfig
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error reading list configurations: {ex.Message}");
+                Console.WriteLine("Error reading list configurations: " + ex.Message);
                 throw;
             }
         }
@@ -385,7 +385,7 @@ namespace Bring.XmlConfig
                 var sourceAttr = node.Attributes["source"];
                 var destAttr = node.Attributes["destination"];
                 var ignoreAttr = node.Attributes["ignore"];
-                var datatypeAttr = node.Attributes["datatype"]; 
+                var datatypeAttr = node.Attributes["datatype"];
 
                 if (sourceAttr != null)
                 {
@@ -394,7 +394,7 @@ namespace Bring.XmlConfig
                         Source = sourceAttr.Value,
                         Destination = destAttr?.Value ?? sourceAttr.Value,
                         Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value),
-                        DataType = datatypeAttr?.Value 
+                        DataType = datatypeAttr?.Value
                     };
 
                     columnMappings[mapping.Source] = mapping;
@@ -423,7 +423,7 @@ namespace Bring.XmlConfig
         public string Source { get; set; }
         public string Destination { get; set; }
         public bool Ignore { get; set; }
-        public string DataType { get; set; } 
+        public string DataType { get; set; }
     }
 
     // List-specific configuration that can override global settings

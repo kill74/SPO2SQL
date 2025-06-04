@@ -15,7 +15,7 @@ namespace Bring.SPODataQuality
         // Main entry point of the application, executed when the program starts
         private static void Main(string[] args)
         {
-            Console.WriteLine("DEBUG: Usig the Default config");
+            Logger.Log(1, "DEBUG: Usig the Default config");
             string configPath = "XmlConfig\\UserConfig.xml"; // Default path for the configuration file
 
             int verbose = 0;
@@ -47,13 +47,13 @@ namespace Bring.SPODataQuality
 
             try
             {
-                Console.WriteLine("DEBUG: Starting Main");
-                Console.WriteLine("CURRENT TIME: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                Logger.Log(1, "DEBUG: Starting Main");
+                Logger.Log(2, "CURRENT TIME: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
 
                 try
                 {
                     TestSQLConnection();
-                    Console.WriteLine("DEBUG: Main: SQL connection test completed");
+                    Logger.Log(1, "DEBUG: Main: SQL connection test completed");
                 }
                 catch (Exception ex)
                 {
@@ -80,7 +80,7 @@ namespace Bring.SPODataQuality
                 try
                 {
                     spoUser = new SPOUser(credentials.username, credentials.password);
-                    Console.WriteLine("DEBUG: Main: SPOUser created");
+                    Logger.Log(1, "DEBUG: Main: SPOUser created");
                 }
                 catch (Exception ex)
                 {
@@ -95,11 +95,11 @@ namespace Bring.SPODataQuality
                 {
                     list1 = new SPOList();
                     list1.SPOUser = spoUser;
-                    Console.WriteLine("DEBUG: Main: First SPOList configured");
+                    Logger.Log(3, "DEBUG: Main: First SPOList configured");
 
                     list2 = new SPOList();
                     list2.SPOUser = spoUser;
-                    Console.WriteLine("DEBUG: Main: Second SPOList configured");
+                    Logger.Log(1, "DEBUG: Main: Second SPOList configured");
                 }
                 catch (Exception ex)
                 {
@@ -114,11 +114,11 @@ namespace Bring.SPODataQuality
                     if ((uint)args.Length > 0U)
                     {
                         string lower = args[0].ToLower();
-                        Console.WriteLine("DEBUG: Main: Received argument - " + lower);
+                        Logger.Log(1, "DEBUG: Main: Received argument - " + lower);
 
                         if (lower == "daily")
                         {
-                            Console.WriteLine("DEBUG: Main: Executing daily");
+                            Logger.Log(1, "DEBUG: Main: Executing daily");
                             try
                             {
                                 RefreshSQLLists.SPOtoSQLUpdate(true);
@@ -132,7 +132,7 @@ namespace Bring.SPODataQuality
                         }
                         else if (lower == "monthly")
                         {
-                            Console.WriteLine("DEBUG: Main: Executing monthly");
+                            Logger.Log(1, "DEBUG: Main: Executing monthly");
                             try
                             {
                                 RefreshSQLLists.SPOtoSQLUpdate(false);
@@ -146,7 +146,7 @@ namespace Bring.SPODataQuality
                         }
                         else
                         {
-                            Console.WriteLine("Unrecognized argument, please use daily or monthly as the argument");
+                            Logger.Log(2, "Unrecognized argument, please use daily or monthly as the argument");
                         }
                     }
                 }
@@ -157,8 +157,8 @@ namespace Bring.SPODataQuality
                     Console.WriteLine("Stack Trace: " + ex.StackTrace);
                 }
 
-                Console.WriteLine("End of requests.");
-                Console.WriteLine();
+                Logger.Log(2, "End of requests.");
+                Logger.Log(2, "");
             }
             catch (Exception ex)
             {
@@ -170,15 +170,15 @@ namespace Bring.SPODataQuality
 
         private static void TestSQLConnection()
         {
-            Console.WriteLine("Testing SQL Server connection...");
+            Logger.Log(2, "Testing SQL Server connection...");
             try
             {
                 string connectionString = ConfigurationReader.GetSqlConnectionString();
-                Console.WriteLine($"Attempting to connect to SQL server...");
+                Logger.Log(2, "Attempting to connect to SQL server...");
 
                 using (var connection = new SqlConnection(connectionString))
                 {
-                    try 
+                    try
                     {
                         connection.Open();
                     }
@@ -186,7 +186,7 @@ namespace Bring.SPODataQuality
                     {
                         Console.WriteLine("ERROR: Unable to connect to the SQL Server.");
                         Console.WriteLine("Please check if your VPN connection is active and try again.");
-                        Console.WriteLine($"Technical details: {ex.Message}");
+                        Console.WriteLine("Technical details: " + ex.Message);
                         Console.WriteLine("Press any key to exit...");
                         Console.ReadKey();
                         Environment.Exit(1);
@@ -198,9 +198,9 @@ namespace Bring.SPODataQuality
                         throw;
                     }
 
-                    Console.WriteLine($"Server: {connection.DataSource}");
-                    Console.WriteLine($"Database: {connection.Database}");
-                    Console.WriteLine("SQL connection established successfully!");
+                    Logger.Log(2, "Server: " + connection.DataSource);
+                    Logger.Log(2, "Database: " + connection.Database);
+                    Logger.Log(2, "SQL connection established successfully!");
 
                     // Basic permissions test
                     using (var command = connection.CreateCommand())
@@ -210,7 +210,7 @@ namespace Bring.SPODataQuality
                         {
                             command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES";
                             int tableCount = (int)command.ExecuteScalar();
-                            Console.WriteLine($"Number of tables in database: {tableCount}");
+                            Logger.Log(2, "Number of tables in database: " + tableCount);
                         }
                         catch (Exception ex)
                         {
@@ -223,11 +223,11 @@ namespace Bring.SPODataQuality
                         {
                             command.CommandText = "CREATE TABLE #TempTest (ID int); DROP TABLE #TempTest;";
                             command.ExecuteNonQuery();
-                            Console.WriteLine("CREATE TABLE permission: OK");
+                            Logger.Log(2, "CREATE TABLE permission: OK");
                         }
                         catch (SqlException ex)
                         {
-                            Console.WriteLine($"Warning: No CREATE TABLE permission: {ex.Message}");
+                            Logger.Log(2, "Warning: No CREATE TABLE permission: " + ex.Message);
                         }
                         catch (Exception ex)
                         {
@@ -240,16 +240,16 @@ namespace Bring.SPODataQuality
 
             catch (SqlException ex)
             {
-                Console.WriteLine($"SQL connection error: {ex.Message}");
-                Console.WriteLine($"Error number: {ex.Number}");
-                Console.WriteLine($"State: {ex.State}");
-                Console.WriteLine($"Procedure: {ex.Procedure}");
+                Console.WriteLine("SQL connection error: " + ex.Message);
+                Console.WriteLine("Error number: " + ex.Number);
+                Console.WriteLine("State: " + ex.State);
+                Console.WriteLine("Procedure: " + ex.Procedure);
                 Console.WriteLine("The Execution is stoping.");
                 throw; // Re-throw to stop execution
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"General error testing SQL connection: {ex.Message}");
+                Console.WriteLine("General error testing SQL connection: " + ex.Message);
                 throw;
             }
         }
@@ -258,7 +258,7 @@ namespace Bring.SPODataQuality
         // Method to retrieve and display all lists from a specific SharePoint site
         public static void GetAllLists()
         {
-            Console.WriteLine("DEBUG: Entering GetAllLists");
+            Logger.Log(1, "DEBUG: Entering GetAllLists");
             try
             {
                 // Get SharePoint credentials
@@ -275,18 +275,18 @@ namespace Bring.SPODataQuality
                 {
                     try
                     {
-                        Console.WriteLine("DEBUG: Loading list - " + allList.Title);
+                        Logger.Log(1, "DEBUG: Loading list - " + allList.Title);
                         // Load the IsSystemList property to determine if the list is a system list
                         context.Ctx.Load<List>(allList, new Expression<Func<List, object>>[1]
                         {
                             (Expression<Func<List, object>>) (l => (object) l.IsSystemList)
                         });
                         context.Ctx.ExecuteQuery(); // Execute the query to retrieve the data
-                        Console.WriteLine("List Name: " + allList.Title + "; is: " + allList.IsSystemList.ToString());
+                        Logger.Log(2, "List Name: " + allList.Title + "; is: " + allList.IsSystemList.ToString());
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"ERROR: Failed to load or display list '{allList.Title}'.");
+                        Console.WriteLine("ERROR: Failed to load or display list '" + allList.Title + "'.");
                         Console.WriteLine("Exception: " + ex.Message);
                     }
                 }
@@ -302,7 +302,7 @@ namespace Bring.SPODataQuality
         // Debugging method to inspect the properties of a specific SharePoint list
         private static void SPODebug(string listName, string ctxURL, SPOUser user)
         {
-            Console.WriteLine("DEBUG: Entering SPODebug");
+            Logger.Log(1, "DEBUG: Entering SPODebug");
             try
             {
                 // Create a SharePoint list object with a CAML query limiting to 1 item
@@ -314,7 +314,7 @@ namespace Bring.SPODataQuality
                     CAMLQuery = "<View><RowLimit>1</RowLimit></View>"
                 };
 
-                Console.WriteLine("DEBUG: Executing Build");
+                Logger.Log(1, "DEBUG: Executing Build");
                 try
                 {
                     spoList.Build(); // Build the list to load its data
@@ -326,14 +326,14 @@ namespace Bring.SPODataQuality
                     return;
                 }
 
-                Console.WriteLine("DEBUG: Executing PropsToString");
+                Logger.Log(1, "DEBUG: Executing PropsToString");
                 try
                 {
                     // Print the properties of the first item in the list for debugging
                     if (spoList.ItemCollection != null && spoList.ItemCollection.Count > 0)
                         spoList.PropsToString(spoList.ItemCollection[0]);
                     else
-                        Console.WriteLine("No items found in the list.");
+                        Logger.Log(2, "No items found in the list.");
                 }
                 catch (Exception ex)
                 {
@@ -354,13 +354,13 @@ namespace Bring.SPODataQuality
         {
             try
             {
-                Console.WriteLine("DEBUG: Starting RefreshListsSPO");
+                Logger.Log(1, "DEBUG: Starting RefreshListsSPO");
 
                 try
                 {
                     // Build the source list to load its data
                     sourceList.Build();
-                    Console.WriteLine("DEBUG: sourceList.Build completed");
+                    Logger.Log(1, "DEBUG: sourceList.Build completed");
                 }
                 catch (Exception ex)
                 {
@@ -373,7 +373,7 @@ namespace Bring.SPODataQuality
                 {
                     // Build the destination list to load its data
                     destList.Build();
-                    Console.WriteLine("DEBUG: destList.Build completed");
+                    Logger.Log(1, "DEBUG: destList.Build completed");
                 }
                 catch (Exception ex)
                 {
@@ -390,7 +390,7 @@ namespace Bring.SPODataQuality
                 {
                     // Get the field mappings between the source and destination lists
                     actualFields = GetActualFields(sourceList, destList);
-                    Console.WriteLine("DEBUG: Fields obtained");
+                    Logger.Log(1, "DEBUG: Fields obtained");
                 }
                 catch (Exception ex)
                 {
@@ -417,7 +417,7 @@ namespace Bring.SPODataQuality
                 // If the destination list has fewer items, add new items to match the source
                 if (num2 < num1)
                 {
-                    Console.WriteLine("DEBUG: Adding new items");
+                    Logger.Log(1, "DEBUG: Adding new items");
                     try
                     {
                         do
@@ -427,9 +427,9 @@ namespace Bring.SPODataQuality
                         }
                         while (num2 < num1);
 
-                        Console.WriteLine("Adding new items...");
+                        Logger.Log(2, "Adding new items...");
                         destList.Update(); // Update the destination list with the new items
-                        Console.WriteLine("Done adding items.");
+                        Logger.Log(2, "Done adding items.");
                     }
                     catch (Exception ex)
                     {
@@ -453,7 +453,7 @@ namespace Bring.SPODataQuality
                             }
                             catch (Exception ex)
                             {
-                                Console.WriteLine($"ERROR: Failed to copy field '{actualFields[index2, 1]}' to '{actualFields[index2, 0]}' for item ID {id}.");
+                                Console.WriteLine("ERROR: Failed to copy field '" + actualFields[index2, 1] + "' to '" + actualFields[index2, 0] + "' for item ID " + id + ".");
                                 Console.WriteLine("Exception: " + ex.Message);
                             }
                         }
@@ -463,7 +463,7 @@ namespace Bring.SPODataQuality
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"ERROR: Failed to update item ID {id} in destination list.");
+                            Console.WriteLine("ERROR: Failed to update item ID " + id + " in destination list.");
                             Console.WriteLine("Exception: " + ex.Message);
                         }
                     }
@@ -478,7 +478,7 @@ namespace Bring.SPODataQuality
                 {
                     // Execute the query to apply all changes to the SharePoint site
                     destList.Ctx.ExecuteQuery();
-                    Console.WriteLine(sourceList.Site + " " + sourceList.Name + " -> " + destList.Site + " " + destList.Name + ": Done!");
+                    Logger.Log(2, sourceList.Site + " " + sourceList.Name + " -> " + destList.Site + " " + destList.Name + ": Done!");
                 }
                 catch (Exception ex)
                 {
@@ -497,13 +497,13 @@ namespace Bring.SPODataQuality
         // Helper method to create a mapping of fields between two lists based on their titles
         private static string[,] GetActualFields(SPOList listone, SPOList listtwo)
         {
-            Console.WriteLine("DEBUG: Entering GetActualFields");
+            Logger.Log(1, "DEBUG: Entering GetActualFields");
             try
             {
                 // Get fields from both lists
                 List<Field> fields1 = GetFields(listone);
                 List<Field> fields2 = GetFields(listtwo);
-                                
+
                 // Create a 2D array to store the field mappings (internal names)
                 string[,] strArray = new string[fields1.Count, 2];
                 int index1 = 0;
@@ -520,7 +520,7 @@ namespace Bring.SPODataQuality
                         {
                             strArray[index1, 0] = field2.InternalName; // Destination field
                             strArray[index1, 1] = field1.InternalName; // Source field
-                            Console.WriteLine($"DEBUG: Match found - {field1.Title}");
+                            Logger.Log(1, "DEBUG: Match found - " + field1.Title);
                         }
                         ++index2;
                     }
@@ -543,7 +543,7 @@ namespace Bring.SPODataQuality
         // Helper method to retrieve fields from a SharePoint list, excluding base type fields except "Title"
         private static List<Field> GetFields(SPOList list)
         {
-            Console.WriteLine("DEBUG: Entering GetFields");
+            Logger.Log(1, "DEBUG: Entering GetFields");
             List<Field> fieldList = new List<Field>();
             try
             {
@@ -554,7 +554,7 @@ namespace Bring.SPODataQuality
                     if (!field.FromBaseType || field.InternalName == "Title")
                     {
                         fieldList.Add(field);
-                        Console.WriteLine($"DEBUG: Field added - {field.Title}");
+                        Logger.Log(1, "DEBUG: Field added - " + field.Title);
                     }
                 }
             }
