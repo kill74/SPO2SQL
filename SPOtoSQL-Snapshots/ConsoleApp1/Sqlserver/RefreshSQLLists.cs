@@ -1,6 +1,6 @@
 ﻿using Bring.Sharepoint;
 using Bring.XmlConfig;
-using Bring.SPODataQuality; 
+using Bring.SPODataQuality;
 using System;
 using System.Configuration;
 
@@ -17,13 +17,13 @@ namespace Bring.Sqlserver
         /// <param name="daily">Indicates whether to perform a daily incremental update or a full current-time refresh.</param>
         public static void SPOtoSQLUpdate(bool daily)
         {
-            Console.WriteLine("SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
+            Logger.Log(2, "SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
 
             try
             {
                 // Load SharePoint credentials from configuration (secure storage recommended)
                 var (username, password) = ConfigurationReader.GetSharePointCredentials();
-                Console.WriteLine($"SPOtoSQLUpdate: Username: {username} Password: {password}");
+                Logger.Log(1, $"SPOtoSQLUpdate: Username: {username} Password: {password}");
 
                 // Establish SharePoint user context
                 SPOUser user;
@@ -51,7 +51,7 @@ namespace Bring.Sqlserver
                         if (config.Ignore) continue; // Ignores the list if "ignore="true\""
 
                         string ctxURL = config.SharepointList;
-                        Console.WriteLine($"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
+                        Logger.Log(1, $"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
                         try
                         {
                             RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
@@ -74,7 +74,7 @@ namespace Bring.Sqlserver
                 Console.WriteLine("Stack Trace: " + ex.StackTrace);
             }
 
-            Console.WriteLine("SPOtoSQLUpdate: SPO to SQL update completed.");
+            Logger.Log(2, "SPOtoSQLUpdate: SPO to SQL update completed.");
         }
 
         /*
@@ -84,13 +84,13 @@ namespace Bring.Sqlserver
         /// <param name="daily">Indicates whether to perform a daily incremental update or a full current-time refresh.</param>
         public static void SPOtoSQLUpdateOLD(bool daily)
         {
-            Console.WriteLine("SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
+            Logger.Log(2, "SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
 
             try
             {
                 // Load SharePoint credentials from configuration (secure storage recommended)
                 var (username, password) = ConfigurationReader.GetSharePointCredentials();
-                Console.WriteLine($"SPOtoSQLUpdate: Username: {username} Password: {password}");
+                Logger.Log(1, $"SPOtoSQLUpdate: Username: {username} Password: {password}");
 
                 // Establish SharePoint user context
                 SPOUser user;
@@ -112,7 +112,7 @@ namespace Bring.Sqlserver
                 {
                     string listName = allKey;
                     string ctxURL = ConfigurationManager.AppSettings[allKey];
-                    Console.WriteLine($"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
+                    Logger.Log(1, $"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
                     try
                     {
                         // Delegate to RefreshListsSQL for per-list processing
@@ -135,7 +135,7 @@ namespace Bring.Sqlserver
                 Console.WriteLine("Stack Trace: " + ex.StackTrace);
             }
 
-            Console.WriteLine("SPOtoSQLUpdate: SPO to SQL update completed.");
+            Logger.Log(2, "SPOtoSQLUpdate: SPO to SQL update completed.");
         }
         */
 
@@ -150,7 +150,7 @@ namespace Bring.Sqlserver
         {
             try
             {
-                Console.WriteLine($"RefreshListsSQL: Initializing SPO list for: {listName}");
+                Logger.Log(1, $"RefreshListsSQL: Initializing SPO list for: {listName}");
 
                 // Initialize SharePoint list object
                 SPOList spoList = null;
@@ -163,9 +163,9 @@ namespace Bring.Sqlserver
                         Name = listName
                     };
 
-                    Console.WriteLine("RefreshListsSQL: SPOList initialized:");
-                    Console.WriteLine($"  Site: {spoList.Site}");
-                    Console.WriteLine($"  Name: {spoList.Name}");
+                    Logger.Log(1, "RefreshListsSQL: SPOList initialized:");
+                    Logger.Log(1, $"  Site: {spoList.Site}");
+                    Logger.Log(1, $"  Name: {spoList.Name}");
                 }
                 catch (Exception ex)
                 {
@@ -185,7 +185,7 @@ namespace Bring.Sqlserver
                         List = spoList
                     };
 
-                    Console.WriteLine("RefreshListsSQL: Building SQL interaction...");
+                    Logger.Log(1, "RefreshListsSQL: Building SQL interaction...");
                     sqlInteraction.Build();
                 }
                 catch (Exception ex)
@@ -202,12 +202,12 @@ namespace Bring.Sqlserver
                 {
                     if (daily)
                     {
-                        Console.WriteLine("RefreshListsSQL: Performing daily update...");
+                        Logger.Log(2, "RefreshListsSQL: Performing daily update...");
                         sqlInteraction.DailyUpdate();
                     }
                     else
                     {
-                        Console.WriteLine("RefreshListsSQL: Performing current time update...");
+                        Logger.Log(2, "RefreshListsSQL: Performing current time update...");
                         sqlInteraction.CurrentTimeUpdate();
                     }
                 }
@@ -220,7 +220,7 @@ namespace Bring.Sqlserver
                     return;
                 }
 
-                Console.WriteLine($"RefreshListsSQL: Update for list '{listName}' completed.");
+                Logger.Log(2, $"RefreshListsSQL: Update for list '{listName}' completed.");
             }
             catch (Exception ex)
             {

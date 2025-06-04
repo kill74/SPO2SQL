@@ -40,7 +40,7 @@ namespace Bring.Sqlserver
         /// </summary>
         public void Build()
         {
-            LogInfo("Build", $"Starting SQL build process for list: {this.List?.Name ?? "null"}");
+            Logger.Log(1, "[Build]", $"Starting SQL build process for list: {this.List?.Name ?? "null"}");
 
             try
             {
@@ -48,20 +48,20 @@ namespace Bring.Sqlserver
                 // this.SelectedColumns = ConfigurationReader.GetSelectedColumns();
                 this.IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
 
-                // LogInfo("Build", $"Selected columns from config: {(this.SelectedColumns == null ? "All" : string.Join(", ", this.SelectedColumns))}");
-                LogInfo("Build", $"Ignored columns from config: {(this.IgnoredColumns == null ? "None" : string.Join(", ", this.IgnoredColumns))}");
+                Logger.Log(1, "[Build]", $"Ignored columns from config: {(this.IgnoredColumns == null ? "None" : string.Join(", ", this.IgnoredColumns))}");
 
                 this.TableName = this.ToPascalCase(this.List.Name, false);
 
                 try
                 {
                     this.Connection = new SqlConnection(ConfigurationReader.GetSqlConnectionString());
-                    LogInfo("Build", "Establishing SQL connection...");
+                    Logger.Log(1, "Build", "Establishing SQL connection...");
                     this.Connection.Open();
                 }
                 catch (SqlException ex)
                 {
-                    LogError("Build", "Database connection failed", ex, true);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: Database connection failed - {ex.Message}");
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                     throw;
                 }
 
@@ -70,24 +70,26 @@ namespace Bring.Sqlserver
 
                 try
                 {
-                    LogInfo("Build", "Initializing SharePoint list structure...");
+                    Logger.Log(1, "[Build]", "Initializing SharePoint list structure...");
                     this.List.Build();
                 }
                 catch (Exception ex)
                 {
-                    LogError("Build", "SharePoint list initialization failed", ex, true);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: SharePoint list initialization failed - {ex.Message}");
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                     throw;
                 }
 
                 try
                 {
                     this.FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
-                    LogInfo("Build", "Building field dictionary...");
+                    Logger.Log(1, "[Build]", "Building field dictionary...");
                     this.BuildDictionary();
                 }
                 catch (Exception ex)
                 {
-                    LogError("Build", "Field dictionary creation failed", ex, true);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: Field dictionary creation failed - {ex.Message}");
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                     throw;
                 }
 
@@ -95,24 +97,26 @@ namespace Bring.Sqlserver
                 {
                     if (!this.TableExists(this.TableName))
                     {
-                        LogInfo("Build", $"Creating new table: {this.TableName}");
+                        Logger.Log(1, "[Build]", $"Creating new table: {this.TableName}");
                         this.CreateTable();
                     }
                     else
                     {
-                        LogInfo("Build", $"Updating existing table: {this.TableName}");
+                        Logger.Log(1, "[Build]", $"Updating existing table: {this.TableName}");
                         this.UpdateTableDesign();
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogError("Build", "Table structure operation failed", ex, true);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: Table structure operation failed - {ex.Message}");
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                     throw;
                 }
             }
             catch (Exception ex)
             {
-                LogFatal("Build", "Critical failure during build process", ex);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.Build: Critical failure during build process - {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                 throw;
             }
         }
@@ -124,7 +128,7 @@ namespace Bring.Sqlserver
         {
             try
             {
-                LogInfo("DailyUpdate", $"Starting daily update for table: {this.TableName}");
+                Logger.Log(2, "[DailyUpdate]", $"Starting daily update for table: {this.TableName}"); // ver isto
 
                 try
                 {
@@ -133,7 +137,7 @@ namespace Bring.Sqlserver
                 }
                 catch (Exception ex)
                 {
-                    LogError("DailyUpdate", "Failed to delete snapshot marker rows", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.DailyUpdate: Failed to delete snapshot marker rows - {ex.Message}");
                 }
 
                 try
@@ -142,7 +146,7 @@ namespace Bring.Sqlserver
                 }
                 catch (Exception ex)
                 {
-                    LogError("DailyUpdate", "Data transfer operation failed", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.DailyUpdate: Data transfer operation failed - {ex.Message}");
                 }
 
                 try
@@ -151,23 +155,24 @@ namespace Bring.Sqlserver
                 }
                 catch (Exception ex)
                 {
-                    LogError("DailyUpdate", "Metadata update failed", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.DailyUpdate: Metadata update failed - {ex.Message}");
                 }
 
                 try
                 {
                     this.Transaction.Commit();
-                    LogInfo("DailyUpdate", "Transaction committed successfully");
+                    Logger.Log(2, "[DailyUpdate]", "Transaction committed successfully");
                 }
                 catch (Exception ex)
                 {
-                    LogError("DailyUpdate", "Transaction commit failed", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.DailyUpdate: Transaction commit failed - {ex.Message}");
                     throw;
                 }
             }
             catch (Exception ex)
             {
-                LogFatal("DailyUpdate", "Critical failure during daily update", ex);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.DailyUpdate: Critical failure during daily update - {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                 SafeRollback();
             }
         }
@@ -179,7 +184,7 @@ namespace Bring.Sqlserver
         {
             try
             {
-                LogInfo("CurrentTimeUpdate", $"Starting current-time update for: {this.TableName}");
+                Logger.Log(2, "[CurrentTimeUpdate]", $"Starting current-time update for: {this.TableName}"); // ver isto
 
                 try
                 {
@@ -187,7 +192,7 @@ namespace Bring.Sqlserver
                 }
                 catch (Exception ex)
                 {
-                    LogError("CurrentTimeUpdate", "Data transfer operation failed", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.CurrentTimeUpdate: Data transfer operation failed - {ex.Message}");
                 }
 
                 try
@@ -196,23 +201,24 @@ namespace Bring.Sqlserver
                 }
                 catch (Exception ex)
                 {
-                    LogError("CurrentTimeUpdate", "Metadata update failed", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.CurrentTimeUpdate: Metadata update failed - {ex.Message}");
                 }
 
                 try
                 {
                     this.Transaction.Commit();
-                    LogInfo("CurrentTimeUpdate", "Transaction committed successfully");
+                    Logger.Log(2, "[CurrentTimeUpdate] Transaction committed successfully");
                 }
                 catch (Exception ex)
                 {
-                    LogError("CurrentTimeUpdate", "Transaction commit failed", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.CurrentTimeUpdate: Transaction commit failed - {ex.Message}");
                     throw;
                 }
             }
             catch (Exception ex)
             {
-                LogFatal("CurrentTimeUpdate", "Critical failure during current-time update", ex);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.CurrentTimeUpdate: Critical failure during current-time update - {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                 SafeRollback();
             }
         }
@@ -222,7 +228,7 @@ namespace Bring.Sqlserver
         /// </summary>
         private void BuildDictionary()
         {
-            LogInfo("BuildDictionary", "Building field name dictionary...");
+            Logger.Log(1, "[BuildDictionary] Building field name dictionary...");
             int processedFields = 0;
             int skippedFields = 0;
             int ignoredFields = 0;
@@ -247,45 +253,43 @@ namespace Bring.Sqlserver
                                 if (mapping.Ignore)
                                 {
                                     ignoredFields++;
-                                    LogInfo("BuildDictionary", $"Ignored field (by mapping): {columnName}");
+                                    Logger.Log(1, "[BuildDictionary] Ignored field (by mapping): {columnName}");
                                     continue;
                                 }
 
                                 string destinationName = mapping.Destination;
                                 this.FNDictionary.Add(this.GetKeyName(destinationName, 1), field);
                                 processedFields++;
-                                LogInfo("BuildDictionary", $"Added mapped field: {columnName} -> {destinationName}");
+                                Logger.Log(1, "[BuildDictionary] Added mapped field: {columnName} -> {destinationName}");
                             }
                             else
                             {
                                 skippedFields++;
-                                LogInfo("BuildDictionary", $"Skipped field (not mapped): {columnName}");
+                                Logger.Log(1, "[BuildDictionary] Skipped field (not mapped): {columnName}");
                             }
                         }
                         // Se não houver mapeamento, processa todos (comportamento padrão)
                         else if (this.IgnoredColumns != null && this.IgnoredColumns.Contains(columnName))
                         {
                             ignoredFields++;
-                            LogInfo("BuildDictionary", $"Ignored field (global): {columnName}");
+                            Logger.Log(1, "[BuildDictionary] Ignored field (global): " + columnName);
                         }
                         else
                         {
                             this.FNDictionary.Add(this.GetKeyName(columnName, 1), field);
                             processedFields++;
-                            LogInfo("BuildDictionary", $"Added field: {columnName}");
+                            Logger.Log(1, "[BuildDictionary] Added field: " + columnName);
                         }
                     }
                     catch (Exception ex)
                     {
                         skippedFields++;
-                        LogError("BuildDictionary", $"Failed to process field: {field.Title}", ex);
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.BuildDictionary: Failed to process field: {field.Title} - {ex.Message}");
                     }
                 }
             }
 
-            LogInfo("BuildDictionary",
-                $"Dictionary built. Processed: {processedFields}, " +
-                $"Skipped: {skippedFields}, Ignored: {ignoredFields}");
+            Logger.Log(1, "[BuildDictionary] Dictionary built. Processed: " + processedFields + ", Skipped: " + skippedFields + ", Ignored: " + ignoredFields);
         }
 
         private bool TableExists(string listName)
@@ -294,19 +298,20 @@ namespace Bring.Sqlserver
             {
                 this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{listName}'";
                 bool exists = (int)this.Command.ExecuteScalar() != 0;
-                LogInfo("TableExists", $"Table '{listName}' exists: {exists}");
+                Logger.Log(1, "[TableExists]", $"Table '{listName}' exists: {exists}");
                 return exists;
             }
             catch (Exception ex)
             {
-                LogError("TableExists", $"Failed to check existence of table '{listName}'", ex, true);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TableExists: Failed to check existence of table '{listName}' - {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                 throw;
             }
         }
 
         private void CreateTable()
         {
-            LogInfo("CreateTable", $"Creating new table: {this.TableName}");
+            Logger.Log(1, "[CreateTable] Creating new table: " + this.TableName);
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.AppendLine($"CREATE TABLE [{this.TableName}] (");
             stringBuilder.AppendLine("[Snapshot] datetime NULL,");
@@ -331,18 +336,18 @@ namespace Bring.Sqlserver
             try
             {
                 this.Command.ExecuteNonQuery();
-                LogInfo("CreateTable", $"Successfully created table: {this.TableName}");
+                Logger.Log(1, "[CreateTable] Successfully created table: " + this.TableName);
             }
             catch (Exception ex)
             {
-                LogError("CreateTable", $"Failed to create table: {this.TableName}", ex);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.CreateTable: Failed to create table: {this.TableName} - {ex.Message}");
                 throw;
             }
         }
 
         private void UpdateTableDesign()
         {
-            LogInfo("UpdateTableDesign", $"Updating design for table: {this.TableName}");
+            Logger.Log(1, "[UpdateTableDesign] Updating design for table: " + this.TableName);
             int updatedColumns = 0;
             int failedColumns = 0;
 
@@ -369,16 +374,16 @@ namespace Bring.Sqlserver
                 catch (Exception ex)
                 {
                     failedColumns++;
-                    LogError("UpdateTableDesign", $"Failed to update column: {fn.Key}", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.UpdateTableDesign: Failed to update column: {fn.Key} - {ex.Message}");
                 }
             }
 
-            LogInfo("UpdateTableDesign", $"Design update completed. Updated: {updatedColumns}, Failed: {failedColumns}");
+            Logger.Log(1, "[UpdateTableDesign] Design update completed. Updated: " + updatedColumns + ", Failed: " + failedColumns);
         }
 
         private void TransferData(string snapDate)
         {
-            LogInfo("TransferData", $"Beginning data transfer for snapshot: {snapDate}");
+            Logger.Log(1, "[TransferData] Beginning data transfer for snapshot: " + snapDate);
             StringBuilder stringBuilder = new StringBuilder();
             string sqlColNames = this.GetSQLColNames();
             int processedItems = 0;
@@ -441,17 +446,17 @@ namespace Bring.Sqlserver
                     catch (Exception ex)
                     {
                         failedItems++;
-                        LogError("TransferData", $"Failed to insert item {processedItems + failedItems}", ex);
+                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TransferData: Failed to insert item {processedItems + failedItems} - {ex.Message}");
                     }
                 }
                 catch (Exception ex)
                 {
                     failedItems++;
-                    LogError("TransferData", $"Failed to process item {processedItems + failedItems}", ex);
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TransferData: Failed to process item {processedItems + failedItems} - {ex.Message}");
                 }
             }
 
-            LogInfo("TransferData", $"Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
+            Logger.Log(1, "[TransferData]", $"Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
         }
 
         private string SQLFieldType(Field field)
@@ -490,7 +495,7 @@ namespace Bring.Sqlserver
                         ? "[nvarchar](MAX)"
                         : "[int]";
                 default:
-                    LogWarning("SQLFieldType", $"Unknown field type encountered - Field: {field.Title}, Type: {field.TypeAsString}");
+                    Logger.Log(1, "[SQLFieldType]", $"Unknown field type encountered - Field: {field.Title}, Type: {field.TypeAsString}");
                     return null;
             }
         }
@@ -508,18 +513,18 @@ namespace Bring.Sqlserver
 
         private void UpdateMetadata()
         {
-            LogInfo("UpdateMetadata", $"Updating metadata for table: {this.TableName}");
+            Logger.Log(1, "[UpdateMetadata]", $"Updating metadata for table: {this.TableName}");
             try
             {
                 this.Command.CommandText = $"DELETE FROM Metadata WHERE TableName = '{this.TableName}'";
                 this.Command.ExecuteNonQuery();
                 this.Command.CommandText = $"INSERT INTO Metadata (TableName, LastRefreshDate) VALUES ('{this.TableName}', '{this.CurrentTime}')";
                 this.Command.ExecuteNonQuery();
-                LogInfo("UpdateMetadata", "Metadata updated successfully");
+                Logger.Log(1, "[UpdateMetadata]", "Metadata updated successfully");
             }
             catch (Exception ex)
             {
-                LogError("UpdateMetadata", "Failed to update metadata", ex);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.UpdateMetadata: Failed to update metadata - {ex.Message}");
                 throw;
             }
         }
@@ -550,7 +555,6 @@ namespace Bring.Sqlserver
                 ? this.ToPascalCase(field.InternalName, true)
                 : name;
         }
-
         private string ColNameConvetions(Field field)
         {
             var sb = new StringBuilder(this.ToPascalCase(field.Title, false));
@@ -596,11 +600,11 @@ namespace Bring.Sqlserver
             try
             {
                 this.Transaction?.Rollback();
-                LogInfo("SafeRollback", "Transaction rolled back successfully");
+                Logger.Log(1, "[SafeRollback] Transaction rolled back successfully");
             }
             catch (Exception ex)
             {
-                LogError("SafeRollback", "Failed to rollback transaction", ex);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.SafeRollback: Failed to rollback transaction - {ex.Message}");
             }
         }
 
@@ -608,7 +612,7 @@ namespace Bring.Sqlserver
 
         private void LogInfo(string method, string message)
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [INFO] SQLInteraction.{method}: {message}");
+            Logger.Log(1, $"SQLInteraction.{method}", message);
         }
 
         private void LogError(string method, string message, Exception ex, bool includeStack = false)
@@ -620,12 +624,12 @@ namespace Bring.Sqlserver
 
         private void LogWarning(string method, string message)
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [WARN] SQLInteraction.{method}: {message}");
+            Logger.Log(1, $"SQLInteraction.{method}", message);
         }
 
         private void LogDebug(string method, string message)
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] SQLInteraction.{method}: {message}");
+            Logger.Log(1, $"SQLInteraction.{method}", message);
         }
 
         private void LogFatal(string method, string message, Exception ex)
@@ -636,7 +640,7 @@ namespace Bring.Sqlserver
 
         private void LogVerbose(string method, string message)
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [VERBOSE] SQLInteraction.{method}: {message}");
+            Logger.Log(1, $"SQLInteraction.{method}", message);
         }
 
         #endregion
