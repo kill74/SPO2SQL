@@ -1,4 +1,5 @@
 ﻿using Microsoft.SharePoint.Client;
+using Microsoft.Identity.Client;
 using System;
 using System.Security;
 
