@@ -17,6 +17,7 @@ namespace Bring.XmlConfig
 
         public static void SetConfigPath(string path)
         {
+            Console.WriteLine($"Setting configuration path to: {path}");
             _configPath = path;
             _xmlDoc = null; // força recarregar se já estava carregado
         }
