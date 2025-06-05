@@ -1,10 +1,10 @@
 ﻿<Configuration>
 	<SharePoint>
-		<Username>xxx</Username>
-		<Password encrypted="true">xxx+</Password>
+		<Username>Guilherme.sales@bringglobal.com</Username>
+		<Password encrypted="true">=UtKid_3AV^r]H+</Password>
 	</SharePoint>
 	<SQL>
-		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=xxx;Password=xxx;</ConnectionString>
+		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=guilherme.sales;Password=fCyj765ERtg%3"!;</ConnectionString>
 	</SQL>
 	<ReplicationConfiguration>
 		 <!-- trocar nome de context para sharepointlist -->

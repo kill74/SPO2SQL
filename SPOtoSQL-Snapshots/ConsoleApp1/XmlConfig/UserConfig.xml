@@ -1,6 +1,5 @@
 ﻿<Configuration>
 	<SharePoint>
-
 				<ClientId>a78f0b66-774b-4d19-aed1-a444ae3911d7</ClientId>
 				<ClientSecret encrypted="true">03e2dcd3-e6e0-4b8e-b799-f09b87209a81</ClientSecret>
 				<TenantId>36f283b4-71d8-4732-b479-9c79c9e721f8</TenantId>
