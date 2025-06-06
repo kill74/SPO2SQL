@@ -1,7 +1,7 @@
 ﻿<Configuration>
 	<SharePoint>
 		<Username>Guilherme.sales@bringglobal.com</Username>
-		<Password encrypted="true">=UtKid_3AV^r]H+</Password>
+		<Password encrypted="true">UtKid_3AV^r]H+</Password>
 	</SharePoint>
 	<SQL>
 		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=guilherme.sales;Password=fCyj765ERtg%3"!;</ConnectionString>

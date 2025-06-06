@@ -1,9 +1,9 @@
 ﻿<Configuration>
 	<SharePoint>
-		<ClientId>a78f0b66-774b-4d19-aed1-a444ae3911d7</ClientId>
-		<ClientSecret encrypted="true">03e2dcd3-e6e0-4b8e-b799-f09b87209a81</ClientSecret>
+		<ClientId>f73e22a6-ab4f-4125-8d19-0f538db2c947</ClientId>
+		<CertificateThumbprint>cd0b21eea3b3422b9281313a4173409a</CertificateThumbprint>
 		<TenantId>36f283b4-71d8-4732-b479-9c79c9e721f8</TenantId>
-		<SiteUrl>https://yourdomain.sharepoint.com/sites/yoursite</SiteUrl>
+		<SiteUrl>https://bringglobal.sharepoint.com/Pages/home.aspx</SiteUrl>
 	</SharePoint>
 	<SQL>
 		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=xxx;Password=xxx;</ConnectionString>
