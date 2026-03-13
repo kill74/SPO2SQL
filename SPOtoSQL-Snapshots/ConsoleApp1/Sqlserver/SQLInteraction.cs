@@ -4,7 +4,7 @@ using Bring.SPODataQuality;
 using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.Globalization;
 using System.Text;
 
