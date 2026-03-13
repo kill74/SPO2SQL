@@ -1,10 +1,10 @@
 # SharePoint Sync Tool
 
-![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-blue)
+![.NET](https://img.shields.io/badge/.NET-8.0-blue)
 ![SharePoint CSOM](https://img.shields.io/badge/SharePoint%20CSOM-16.1-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-A console application to synchronise SharePoint Online lists with a SQL Server database, including data quality routines for common list inconsistencies. Built with the SharePoint Client Side Object Model (CSOM) and .NET Framework 4.8.
+A console application to synchronise SharePoint Online lists with a SQL Server database, including data quality routines for common list inconsistencies. Built with the SharePoint Client Side Object Model (CSOM) and .NET 8.0.
 
 ---
 
@@ -51,9 +51,8 @@ All settings (SharePoint credentials, SQL connection string) are stored in an XM
 
 ## Prerequisites
 
-- Windows operating system (.NET Framework 4.8 target)
-- [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48) or later
-- Visual Studio 2019 or 2022 (for building from source)
+- Windows operating system (.NET 8.0 target)
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
 - Access to a SharePoint Online tenant with appropriate read/write permissions
 - SQL Server (any edition) with a database where target tables will be created/updated
 - VPN access if SharePoint or SQL Server is only reachable within a corporate network
@@ -67,25 +66,24 @@ All settings (SharePoint credentials, SQL connection string) are stored in an XM
 git clone https://github.com/your-org/sharepoint-sync-tool.git
 ```
 
-**2. Open the solution in Visual Studio**
-```
-ConsoleApp1.sln
-```
-
-**3. Restore NuGet packages**
-
-The main dependency is `Microsoft.SharePointOnline.CSOM` (v16.1). Visual Studio should restore it automatically. If not, run:
-```
-Update-Package -reinstall
+**2. Restore NuGet packages and build**
+```bash
+cd SPOtoSQL-Net8
+dotnet restore
+dotnet build ConsoleApp1Net8
 ```
 
-**4. Build the solution**
+**3. (Optional) Run the application**
+```bash
+dotnet run --project ConsoleApp1Net8 -- [arguments]
+```
 
-Go to *Build → Build Solution*. The executable will be placed in `bin\Debug` or `bin\Release`.
-
-**5. (Optional) Deploy**
-
-Copy the `bin\Release` folder to any Windows machine with .NET Framework 4.8 installed.
+**4. (Optional) Deploy**
+Publish the application for deployment:
+```bash
+dotnet publish ConsoleApp1Net8 -c Release -r win-x64 --self-contained false
+```
+The published output will be in `ConsoleApp1Net8/bin/Release/net8.0/win-x64/publish`.
 
 ---
 
@@ -123,8 +121,13 @@ All runtime settings are defined in an XML file. The default location is `XmlCon
 
 Run the executable from the command line:
 
+```bash
+ConsoleApp1Net8.exe [arguments]
 ```
-ConsoleApp1.exe [arguments]
+
+Or via `dotnet run`:
+```bash
+dotnet run --project ConsoleApp1Net8 -- [arguments]
 ```
 
 ### Arguments
@@ -141,13 +144,13 @@ ConsoleApp1.exe [arguments]
 
 ```bash
 # Daily sync with normal logging
-ConsoleApp1.exe daily
+ConsoleApp1Net8.exe daily
 
 # Monthly sync with detailed logging and a custom config
-ConsoleApp1.exe monthly --verbose=2 --config="C:\Configs\custom.xml"
+ConsoleApp1Net8.exe monthly --verbose=2 --config="C:\Configs\custom.xml"
 
 # Test SQL connection and exit
-ConsoleApp1.exe diagnostic
+ConsoleApp1Net8.exe diagnostic
 ```
 
 ### What happens during execution?
@@ -164,28 +167,33 @@ ConsoleApp1.exe diagnostic
 ## Project Structure
 
 ```
-ConsoleApp1/
-├── ConsoleApp1.csproj
-├── packages.config
-├── AssemblyInfo.cs
-├── ConsoleLogger/
-│   └── Logger.cs
-├── Sharepoint/
-│   ├── ActivitiesDQ.cs
-│   ├── Context.cs
-│   ├── GetallLists.cs
-│   ├── InvoiceRequestDQ.cs
-│   ├── SPOList.cs
-│   ├── SPOUser.cs
-│   └── TimesheetDQ.cs
-├── SPODataQuality/
-│   └── RefreshSPOLists.cs
-├── Sqlserver/
-│   ├── RefreshSQLLists.cs
-│   └── SQLInteraction.cs
-└── XmlConfig/
-    ├── ConfigHelper.cs
-    └── UserConfig.xml
+SPOtoSQL-Net8/
+├── ConsoleApp1Net8/
+│   ├── ConsoleApp1Net8.csproj
+│   └── ... (source files linked from original location)
+SPOtoSQL-Snapshots/
+└── ConsoleApp1/
+    ├── ConsoleApp1.csproj          (original .NET Framework 4.8 project)
+    ├── packages.config
+    ├── AssemblyInfo.cs
+    ├── ConsoleLogger/
+    │   └── Logger.cs
+    ├── Sharepoint/
+    │   ├── ActivitiesDQ.cs
+    │   ├── Context.cs
+    │   ├── GetallLists.cs
+    │   ├── InvoiceRequestDQ.cs
+    │   ├── SPOList.cs
+    │   ├── SPOUser.cs
+    │   └── TimesheetDQ.cs
+    ├── SPODataQuality/
+    │   └── RefreshSPOLists.cs
+    ├── Sqlserver/
+    │   ├── RefreshSQLLists.cs
+    │   └── SQLInteraction.cs
+    └── XmlConfig/
+        ├── ConfigHelper.cs
+        └── UserConfig.xml
 ```
 
 | Component | Description |
