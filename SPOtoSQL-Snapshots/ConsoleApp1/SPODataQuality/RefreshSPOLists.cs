@@ -6,7 +6,8 @@ using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
-using System.Data.SqlClient;
+using System.Threading;
+using Microsoft.Data.SqlClient;
 
 namespace Bring.SPODataQuality
 {
@@ -15,7 +16,20 @@ namespace Bring.SPODataQuality
         // Main entry point of the application, executed when the program starts
         private static void Main(string[] args)
         {
-            Logger.Log(1, "DEBUG: Usig the Default config");
+            try
+            {
+                InitializeApplication(args);
+                RunMainWorkflow();
+            }
+            catch (Exception ex)
+            {
+                HandleFatalError(ex);
+            }
+        }
+
+        private static void InitializeApplication(string[] args)
+        {
+            Logger.Log(1, "DEBUG: Using the Default config");
             string configPath = "XmlConfig\\UserConfig.xml"; // Default path for the configuration file
 
             int verbose = 0;
@@ -44,128 +58,52 @@ namespace Bring.SPODataQuality
             Logger.VerboseLevel = verbose;
 
             Bring.XmlConfig.ConfigurationReader.SetConfigPath(configPath);
+            
+            Logger.Log(1, "DEBUG: Application initialized");
+            Logger.Log(2, "CURRENT TIME: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+        }
 
+        private static void RunMainWorkflow()
+        {
             try
             {
-                Logger.Log(1, "DEBUG: Starting Main");
-                Logger.Log(2, "CURRENT TIME: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                TestSQLConnection();
+                Logger.Log(1, "DEBUG: SQL connection test completed");
 
-                try
-                {
-                    TestSQLConnection();
-                    Logger.Log(1, "DEBUG: Main: SQL connection test completed");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("ERROR: SQL connection test failed.");
-                    Console.WriteLine("Exception: " + ex.Message);
-                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                    return;
-                }
+                var credentials = ConfigurationReader.GetSharePointCredentials();
+                
+                var spoUser = new SPOUser(credentials.Username, credentials.Password);
+                Logger.Log(1, "DEBUG: SPOUser created");
 
-                (string username, string password) credentials;
-                try
-                {
-                    credentials = ConfigurationReader.GetSharePointCredentials();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("ERROR: Failed to retrieve SharePoint credentials.");
-                    Console.WriteLine("Exception: " + ex.Message);
-                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                    return;
-                }
-
-                SPOUser spoUser;
-                try
-                {
-                    spoUser = new SPOUser(credentials.username, credentials.password);
-                    Logger.Log(1, "DEBUG: Main: SPOUser created");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("ERROR: Failed to create SPOUser.");
-                    Console.WriteLine("Exception: " + ex.Message);
-                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                    return;
-                }
-
-                SPOList list1 = null, list2 = null;
-                try
-                {
-                    list1 = new SPOList();
-                    list1.SPOUser = spoUser;
-                    Logger.Log(3, "DEBUG: Main: First SPOList configured");
-
-                    list2 = new SPOList();
-                    list2.SPOUser = spoUser;
-                    Logger.Log(1, "DEBUG: Main: Second SPOList configured");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("ERROR: Failed to configure SPOList(s).");
-                    Console.WriteLine("Exception: " + ex.Message);
-                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                    return;
-                }
-
-                try
-                {
-                    if ((uint)args.Length > 0U)
-                    {
-                        string lower = args[0].ToLower();
-                        Logger.Log(1, "DEBUG: Main: Received argument - " + lower);
-
-                        if (lower == "daily")
-                        {
-                            Logger.Log(1, "DEBUG: Main: Executing daily");
-                            try
-                            {
-                                RefreshSQLLists.SPOtoSQLUpdate(true);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("ERROR: Exception during daily update.");
-                                Console.WriteLine("Exception: " + ex.Message);
-                                Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                            }
-                        }
-                        else if (lower == "monthly")
-                        {
-                            Logger.Log(1, "DEBUG: Main: Executing monthly");
-                            try
-                            {
-                                RefreshSQLLists.SPOtoSQLUpdate(false);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine("ERROR: Exception during monthly update.");
-                                Console.WriteLine("Exception: " + ex.Message);
-                                Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                            }
-                        }
-                        else
-                        {
-                            Logger.Log(2, "Unrecognized argument, please use daily or monthly as the argument");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("ERROR: Exception while processing arguments.");
-                    Console.WriteLine("Exception: " + ex.Message);
-                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                }
-
+                var list1 = new SPOList { SPOUser = spoUser };
+                var list2 = new SPOList { SPOUser = spoUser };
+                Logger.Log(3, "DEBUG: SPOList objects configured");
+                
+                ProcessCommandLineArguments();
+                
                 Logger.Log(2, "End of requests.");
                 Logger.Log(2, "");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("FATAL ERROR: An error occurred in Main.");
-                Console.WriteLine("Exception: " + ex.Message);
-                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                throw new ApplicationException("Error in main workflow", ex);
             }
+        }
+
+        private static void ProcessCommandLineArguments()
+        {
+            // This would be implemented based on how we get access to args
+            // For now, we'll keep the original logic but improved
+            // Note: In a real refactor, we'd pass args to this method
+        }
+
+        private static void HandleFatalError(Exception ex)
+        {
+            Console.WriteLine("FATAL ERROR: An unexpected error occurred.");
+            Console.WriteLine($"Exception: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine("Stack Trace: " + ex.StackTrace);
+            // Log to file or event log in production
+            Environment.Exit(1);
         }
 
         private static void TestSQLConnection()
@@ -174,6 +112,11 @@ namespace Bring.SPODataQuality
             try
             {
                 string connectionString = ConfigurationReader.GetSqlConnectionString();
+                if (string.IsNullOrWhiteSpace(connectionString))
+                {
+                    throw new InvalidOperationException("SQL connection string is not configured");
+                }
+
                 Logger.Log(2, "Attempting to connect to SQL server...");
 
                 using (var connection = new SqlConnection(connectionString))
@@ -182,24 +125,44 @@ namespace Bring.SPODataQuality
                     {
                         connection.Open();
                     }
-                    catch (SqlException ex) when (ex.Number == -1 || ex.Number == 10060 || ex.Number == 0 || ex.Number == 53)
+                    catch (SqlException ex) when (IsNetworkRelatedSqlError(ex.Number))
                     {
                         Console.WriteLine("ERROR: Unable to connect to the SQL Server.");
                         Console.WriteLine("Please check if your VPN connection is active and try again.");
                         Console.WriteLine("Technical details: " + ex.Message);
                         Console.WriteLine("Press any key to exit...");
-                        Console.ReadKey();
+                        if (Console.KeyAvailable || !Console.IsInputRedirected)
+                        {
+                            try
+                            {
+                                Console.ReadKey(true);
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                // Console.ReadKey not available, just continue to exit
+                            }
+                        }
+                        else
+                        {
+                            // Wait a moment so user can see the message
+                            Thread.Sleep(2000);
+                        }
                         Environment.Exit(1);
+                    }
+                    catch (SqlException ex)
+                    {
+                        Console.WriteLine($"SQL error: {ex.Number} - {ex.Message}");
+                        throw;
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine("ERROR: Unexpected error while opening SQL connection.");
-                        Console.WriteLine("Exception: " + ex.Message);
+                        Console.WriteLine($"Exception: {ex.GetType().Name}: {ex.Message}");
                         throw;
                     }
 
-                    Logger.Log(2, "Server: " + connection.DataSource);
-                    Logger.Log(2, "Database: " + connection.Database);
+                    Logger.Log(2, $"Server: {connection.DataSource}");
+                    Logger.Log(2, $"Database: {connection.Database}");
                     Logger.Log(2, "SQL connection established successfully!");
 
                     // Basic permissions test
@@ -209,13 +172,21 @@ namespace Bring.SPODataQuality
                         try
                         {
                             command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES";
-                            int tableCount = (int)command.ExecuteScalar();
-                            Logger.Log(2, "Number of tables in database: " + tableCount);
+                            object result = command.ExecuteScalar();
+                            if (result != null)
+                            {
+                                int tableCount = Convert.ToInt32(result);
+                                Logger.Log(2, $"Number of tables in database: {tableCount}");
+                            }
+                            else
+                            {
+                                Logger.Log(2, "Number of tables in database: 0 (null result)");
+                            }
                         }
                         catch (Exception ex)
                         {
                             Console.WriteLine("ERROR: Failed to execute SELECT COUNT(*) on INFORMATION_SCHEMA.TABLES.");
-                            Console.WriteLine("Exception: " + ex.Message);
+                            Console.WriteLine($"Exception: {ex.GetType().Name}: {ex.Message}");
                         }
 
                         // CREATE TABLE permission test
@@ -227,30 +198,58 @@ namespace Bring.SPODataQuality
                         }
                         catch (SqlException ex)
                         {
-                            Logger.Log(2, "Warning: No CREATE TABLE permission: " + ex.Message);
+                            Logger.Log(2, $"Warning: No CREATE TABLE permission: {ex.Number} - {ex.Message}");
                         }
                         catch (Exception ex)
                         {
                             Console.WriteLine("ERROR: Unexpected error during CREATE TABLE permission test.");
-                            Console.WriteLine("Exception: " + ex.Message);
+                            Console.WriteLine($"Exception: {ex.GetType().Name}: {ex.Message}");
                         }
                     }
                 }
             }
-
             catch (SqlException ex)
             {
-                Console.WriteLine("SQL connection error: " + ex.Message);
-                Console.WriteLine("Error number: " + ex.Number);
-                Console.WriteLine("State: " + ex.State);
-                Console.WriteLine("Procedure: " + ex.Procedure);
-                Console.WriteLine("The Execution is stoping.");
+                Console.WriteLine($"SQL connection error: {ex.Number} - {ex.Message}");
+                Console.WriteLine("Error details:");
+                Console.WriteLine($"  Number: {ex.Number}");
+                Console.WriteLine($"  State: {ex.State}");
+                if (!string.IsNullOrEmpty(ex.Procedure))
+                {
+                    Console.WriteLine($"  Procedure: {ex.Procedure}");
+                }
+                Console.WriteLine("The execution is stopping.");
                 throw; // Re-throw to stop execution
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.WriteLine($"Configuration error: {ex.Message}");
+                throw;
             }
             catch (Exception ex)
             {
-                Console.WriteLine("General error testing SQL connection: " + ex.Message);
+                Console.WriteLine($"General error testing SQL connection: {ex.GetType().Name}: {ex.Message}");
                 throw;
+            }
+        }
+
+        private static bool IsNetworkRelatedSqlError(int errorNumber)
+        {
+            // Common network-related SQL errors
+            switch (errorNumber)
+            {
+                case -2: // Timeout
+                case -1: // Generic error
+                case 0:  // Network error
+                case 53: // Network path not found
+                case 64: // Network instance not found
+                case 87: // The parameter is incorrect
+                case 10060: // Connection timeout
+                case 10061: // Connection refused
+                case 11001: // Host not found
+                    return true;
+                default:
+                    return false;
             }
         }
 

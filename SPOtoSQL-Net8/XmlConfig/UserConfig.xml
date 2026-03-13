@@ -1,0 +1,179 @@
+﻿<Configuration>
+	<SharePoint>
+		<ClientId>f73e22a6-ab4f-4125-8d19-0f538db2c947</ClientId>
+		<CertificateThumbprint>cd0b21eea3b3422b9281313a4173409a</CertificateThumbprint>
+		<TenantId>36f283b4-71d8-4732-b479-9c79c9e721f8</TenantId>
+		<SiteUrl>https://bringglobal.sharepoint.com/Pages/home.aspx</SiteUrl>
+	</SharePoint>
+	<SQL>
+		<ConnectionString>Server=10.11.30.20;Database=Student;User ID=xxx;Password=xxx;</ConnectionString>
+	</SQL>
+	<ReplicationConfiguration>
+		<!-- Lists configuration -->
+		<Lists>
+			<!-- Technology lists -->
+			<List name="devices management" sharepointlist="Technology" ignore="false">
+				<Columns>
+					<column source="Bringer" destination="Bringer" datatype="nvarchar(255)"/>
+					<column source="Title" destination="Title" />
+				</Columns>
+			</List>
+			<List name="VM management" sharepointlist="Technology" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+
+			<!-- wolf lists -->
+			<List name="accounts" sharepointlist="wolf" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="activities" sharepointlist="wolf" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="Budget" sharepointlist="wolf" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="contact" sharepointlist="wolf" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="opportunities" sharepointlist="wolf" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+
+			<!-- root lists -->
+			<List name="candidate experience" sharepointlist="root" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="competency" sharepointlist="root" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="profile" sharepointlist="root" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="candidates" sharepointlist="root" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="request" sharepointlist="root" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="resources" sharepointlist="root" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+
+			<!-- tree lists -->
+			<List name="courses" sharepointlist="tree" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="my courses" sharepointlist="tree" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+
+			<!-- People lists -->
+			<List name="HR Database" sharepointlist="People" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+
+			<!-- selfservice lists -->
+			<List name="Timesheet" sharepointlist="selfservice/timesheet" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="invoice request" sharepointlist="selfservice/invoicerequest" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="Purchase Request" sharepointlist="selfservice/purchaserequests" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="Travel Plan" sharepointlist="selfservice/travelrequest" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="supplier invoices" sharepointlist="selfservice/supplierinvoices" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="suppliers" sharepointlist="selfservice/supplierinvoices" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="perdiems" sharepointlist="selfservice/perdiems" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="kms" sharepointlist="selfservice/kms" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="expense" sharepointlist="selfservice/expenses" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+
+			<!-- seed lists -->
+			<List name="Unit" sharepointlist="seed" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="Country" sharepointlist="seed" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="ExchangeRate" sharepointlist="seed" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="Company" sharepointlist="seed" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="Business Unit" sharepointlist="seed" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+			<List name="Lob" sharepointlist="seed" ignore="true">
+				<Columns>
+				</Columns>
+			</List>
+
+			<!-- global lists -->
+			<!-- <List name="User Information" context="" ignore="true"> 
+                <Columns>
+                </Columns>
+            </List>
+			-->
+		</Lists>
+
+		<!-- Global column configurations -->
+		<!--trocar nome-->
+		<SelectColumns>
+			<!-- Default columns for all lists not specifically configured above -->
+		</SelectColumns>
+
+		<!--trocar nome-->
+		<GlobalIgnore>
+			<!-- Put here the columns you want to ignore from SharePoint to SQL Server -->
+		</GlobalIgnore>
+	</ReplicationConfiguration>
+</Configuration>
+<!--
+    To synchronize all fields of a list, leave <Columns> empty or remove the tag.
+    To synchronize only specific fields, add <column source="..." destination="..."/> inside <Columns>.
+    To ignore a list, use ignore="true".
+	
+-->
