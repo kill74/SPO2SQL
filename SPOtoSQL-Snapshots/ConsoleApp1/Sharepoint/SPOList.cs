@@ -14,6 +14,24 @@ namespace Bring.Sharepoint
     {
         private List _list;
 
+        /// <summary>
+        /// Name of the SharePoint list
+        /// </summary>
+        public string Name { get; set; }
+
+        /// <summary>
+        /// Collection of items from the SharePoint list
+        /// </summary>
+        public ListItemCollection ItemCollection { get; set; }
+
+        /// <summary>
+        /// Collection of fields in the SharePoint list
+        /// </summary>
+        public FieldCollection Fields { get; set; }
+
+        /// <summary>
+        /// CAML query to filter list items
+        /// </summary>
         public string CAMLQuery { get; set; }
 
         /// <summary>
@@ -25,7 +43,7 @@ namespace Bring.Sharepoint
             {
                 Logger.Log(2, $"Building list '{Name}' from site '{Site}'");
 
-                if (_web == null)
+                if (web == null)
                 {
                     BuildContext();
                 }
@@ -36,7 +54,7 @@ namespace Bring.Sharepoint
                     : new CamlQuery { ViewXml = CAMLQuery };
 
                 // Load list items
-                _list = _web.Lists.GetByTitle(Name);
+                _list = web.Lists.GetByTitle(Name);
                 ItemCollection = _list.GetItems(camlQuery);
                 Fields = _list.Fields;
 
