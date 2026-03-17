@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using Microsoft.SharePoint.Client;
+using Bring.SPODataQuality;
 
 namespace Bring.Sharepoint
 {
@@ -10,7 +11,6 @@ namespace Bring.Sharepoint
   /// </summary>
   public class HealthChecker
   {
-    private readonly Logger _logger;
     private readonly int _verbosity;
 
     /// <summary>
@@ -45,9 +45,8 @@ namespace Bring.Sharepoint
       }
     }
 
-    public HealthChecker(Logger logger = null, int verbosity = 0)
+    public HealthChecker(int verbosity = 0)
     {
-      _logger = logger ?? Logger.Instance;
       _verbosity = verbosity;
     }
 

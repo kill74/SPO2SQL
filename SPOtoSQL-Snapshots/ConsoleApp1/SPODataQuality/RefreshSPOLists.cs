@@ -1,13 +1,13 @@
 ﻿using Bring.Sharepoint;
 using Bring.Sqlserver;
 using Bring.XmlConfig;
-using Bring.SPODataQuality;
 using Microsoft.SharePoint.Client;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using Microsoft.Data.SqlClient;
 using System.Linq.Expressions;
 using System.Threading;
-using Microsoft.Data.SqlClient;
 
 namespace Bring.SPODataQuality
 {
@@ -71,7 +71,7 @@ namespace Bring.SPODataQuality
                 Logger.Log(1, "DEBUG: SQL connection test completed");
 
                 var credentials = ConfigurationReader.GetSharePointCredentials();
-                if (credentials == null)
+                if (string.IsNullOrEmpty(credentials.Username) || string.IsNullOrEmpty(credentials.Password))
                 {
                     throw new InvalidOperationException("Failed to retrieve SharePoint credentials from configuration");
                 }
@@ -289,9 +289,9 @@ namespace Bring.SPODataQuality
                     {
                         Logger.Log(1, "DEBUG: Loading list - " + allList.Title);
                         // Load the IsSystemList property to determine if the list is a system list
-                        context.Ctx.Load<List>(allList, new Expression<Func<List, object>>[1]
+                        context.Ctx.Load<IList>(allList, new Expression<Func<List, object>>[1]
                         {
-                            (Expression<Func<List, object>>) (l => (object) l.IsSystemList)
+                             l => (object) l.IsSystemList
                         });
                         context.Ctx.ExecuteQuery(); // Execute the query to retrieve the data
                         Logger.Log(2, "List Name: " + allList.Title + "; is: " + allList.IsSystemList.ToString());
@@ -338,12 +338,12 @@ namespace Bring.SPODataQuality
                     return;
                 }
 
-                Logger.Log(1, "DEBUG: Executing PropsToString");
+                Logger.Log(1, "DEBUG: Executing PrintItemProperties");
                 try
                 {
                     // Print the properties of the first item in the list for debugging
                     if (spoList.ItemCollection != null && spoList.ItemCollection.Count > 0)
-                        spoList.PropsToString(spoList.ItemCollection[0]);
+                        spoList.PrintItemProperties(spoList.ItemCollection[0]);
                     else
                         Logger.Log(2, "No items found in the list.");
                 }

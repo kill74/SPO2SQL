@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Threading;
 using Microsoft.SharePoint.Client;
+using Bring.SPODataQuality;
 
 namespace Bring.Sharepoint
 {
@@ -11,7 +12,6 @@ namespace Bring.Sharepoint
   /// </summary>
   public class RetryPolicy
   {
-    private readonly Logger _logger;
     private readonly int _maxRetries;
     private readonly int _initialDelayMs;
 
@@ -20,8 +20,7 @@ namespace Bring.Sharepoint
     /// </summary>
     /// <param name="maxRetries">Maximum number of retry attempts (default: 3).</param>
     /// <param name="initialDelayMs">Initial delay in milliseconds before first retry (default: 1000).</param>
-    /// <param name="logger">Logger instance for retry diagnostics.</param>
-    public RetryPolicy(int maxRetries = 3, int initialDelayMs = 1000, Logger logger = null)
+    public RetryPolicy(int maxRetries = 3, int initialDelayMs = 1000)
     {
       if (maxRetries < 1)
         throw new ArgumentException("Maximum retries must be at least 1.", nameof(maxRetries));
@@ -31,7 +30,6 @@ namespace Bring.Sharepoint
 
       _maxRetries = maxRetries;
       _initialDelayMs = initialDelayMs;
-      _logger = logger ?? Logger.Instance;
     }
 
     /// <summary>
