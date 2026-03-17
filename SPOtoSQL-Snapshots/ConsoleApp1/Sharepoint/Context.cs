@@ -2,6 +2,8 @@
 using System;
 using System.Linq.Expressions;
 using System.Net;
+using Bring.SPODataQuality;
+using Bring.XmlConfig;
 
 namespace Bring.Sharepoint
 {
@@ -37,21 +39,36 @@ namespace Bring.Sharepoint
         /// </summary>
         public void BuildContext()
         {
-            // Combine base URL with relative site path
-            var url = "https://bringglobal.sharepoint.com/" + this.Site;
-
-            // Create a new ClientContext and assign credentials
-            var clientContext = new ClientContext(url)
+            try
             {
-                Credentials = this.SPOUser.Credentials
-            };
+                // Get base URL from configuration, with fallback to default
+                string baseUrl = ConfigurationReader.GetSharePointBaseUrl() 
+                    ?? "https://bringglobal.sharepoint.com";
+                
+                string url = $"{baseUrl.TrimEnd('/')}/{Site.TrimStart('/')}";
+                Logger.LogDebug($"Building SharePoint context for: {url}");
 
-            // Store references for later use
-            this.Ctx = clientContext;
-            this.web = this.Ctx.Web;
+                // Create a new ClientContext and assign credentials
+                var clientContext = new ClientContext(url)
+                {
+                    Credentials = SPOUser.Credentials
+                };
 
-            // Load minimal Web object metadata (e.g., Title, Url)
-            this.Ctx.Load<Web>(this.web, Array.Empty<Expression<Func<Web, object>>>());
+                // Store references for later use
+                Ctx = clientContext;
+                web = Ctx.Web;
+
+                // Load minimal Web object metadata
+                Ctx.Load(web, w => w.Title, w => w.Url);
+                Ctx.ExecuteQuery();
+
+                Logger.LogDebug($"SharePoint context established successfully for site: {web.Title}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to build SharePoint context for site '{Site}'", ex);
+                throw;
+            }
         }
 
         /// <summary>
@@ -60,18 +77,32 @@ namespace Bring.Sharepoint
         /// <returns>ListCollection representing all lists on the site.</returns>
         public ListCollection GetAllLists()
         {
-            // Ensure context is built or rebuilt if Site has changed
-            var expectedUrl = "https://bringglobal.sharepoint.com/" + this.Site;
-            if (this.web == null || this.Ctx.Site.Context.Url != expectedUrl)
+            try
             {
-                this.BuildContext();
-            }
+                // Ensure context is built or rebuilt if Site has changed
+                string baseUrl = ConfigurationReader.GetSharePointBaseUrl() 
+                    ?? "https://bringglobal.sharepoint.com";
+                string expectedUrl = $"{baseUrl.TrimEnd('/')}/{Site.TrimStart('/')}";
+                
+                if (web == null || Ctx?.Site?.Url != expectedUrl)
+                {
+                    Logger.LogDebug("Rebuilding context for GetAllLists");
+                    BuildContext();
+                }
 
-            // Load and execute query to get all lists
-            var lists = this.web.Lists;
-            this.Ctx.Load<ListCollection>(lists, Array.Empty<Expression<Func<ListCollection, object>>>());
-            this.Ctx.ExecuteQuery();
-            return lists;
+                // Load and execute query to get all lists
+                var lists = web.Lists;
+                Ctx.Load(lists);
+                Ctx.ExecuteQuery();
+                
+                Logger.LogDebug($"Retrieved {lists.Count} lists from site");
+                return lists;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to retrieve lists from site '{Site}'", ex);
+                throw;
+            }
         }
     }
 }

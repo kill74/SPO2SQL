@@ -7,16 +7,19 @@ namespace Bring.Sharepoint
     /// <summary>
     /// Represents a user context for authenticating against SharePoint Online.
     /// Wraps username and password into a SecureString and SharePointOnlineCredentials.
+    /// Implements IDisposable to properly clean up SecureString password data.
     /// </summary>
-    public class SPOUser
+    public class SPOUser : IDisposable
     {
         /// <summary>
         /// The user's login name (usually an email address).
         /// </summary>
         public string Username { get; private set; }
 
-        // Backing SecureString for the user's password
-        private SecureString securePassword;
+        /// <summary>
+        /// Backing SecureString for the user's password.
+        /// </summary>
+        private SecureString _securePassword;
 
         /// <summary>
         /// Credentials object used by the SharePoint client to authenticate requests.
@@ -29,6 +32,8 @@ namespace Bring.Sharepoint
         /// </summary>
         /// <param name="username">The SharePoint username (e.g., user@tenant.onmicrosoft.com).</param>
         /// <param name="password">The user's plaintext password (will be secured internally).</param>
+        /// <exception cref="ArgumentException">Thrown if username is null or empty.</exception>
+        /// <exception cref="ArgumentNullException">Thrown if password is null.</exception>
         public SPOUser(string username, string password)
         {
             if (string.IsNullOrWhiteSpace(username))
@@ -36,18 +41,26 @@ namespace Bring.Sharepoint
             if (password == null)
                 throw new ArgumentNullException(nameof(password), "Password cannot be null.");
 
-            Console.WriteLine($"SPOUser: Initializing SPOUser for: {username}");
+            Logger.LogDebug($"Initializing SPOUser for: {username}");
 
-            this.Username = username;
+            Username = username;
 
-            // Convert each character of the plaintext password into a SecureString
-            this.securePassword = new SecureString();
+            // Convert plaintext password to SecureString
+            _securePassword = new SecureString();
             foreach (char c in password)
-                this.securePassword.AppendChar(c);
-            this.securePassword.MakeReadOnly();
+                _securePassword.AppendChar(c);
+            _securePassword.MakeReadOnly();
 
             // Create SharePointOnlineCredentials for authentication
-            this.Credentials = new SharePointOnlineCredentials(this.Username, this.securePassword);
+            Credentials = new SharePointOnlineCredentials(Username, _securePassword);
+        }
+
+        /// <summary>
+        /// Disposes of the SecureString password, clearing it from memory.
+        /// </summary>
+        public void Dispose()
+        {
+            _securePassword?.Dispose();
         }
     }
 }
