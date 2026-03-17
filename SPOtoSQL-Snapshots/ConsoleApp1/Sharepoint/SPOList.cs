@@ -1,273 +1,153 @@
-﻿// Decompiled with JetBrains decompiler
-// Type: Bring.Sharepoint.SPOList
-// Assembly: ConsoleApp1, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
-// MVID: 2529ACA9-9F81-4C49-8E47-E8B02D261367
-// Assembly location: C:\Users\KEVIN\Desktop\Visual Studio\SPtoSP\ConsoleApp1.exe
-
-using Microsoft.SharePoint.Client;
+﻿using Microsoft.SharePoint.Client;
 using System;
+using System.Collections.Generic;
 using System.Linq.Expressions;
+using System.Text;
+using Bring.SPODataQuality;
 
 namespace Bring.Sharepoint
 {
-  public class SPOList : Context
-  {
-    private List list;
-
-    public string Name { get; set; }
-
-    public ListItemCollection ItemCollection { get; set; }
-
-    public FieldCollection Fields { get; set; }
-
-    public string CAMLQuery { get; set; }
-
-    public void Build()
+    /// <summary>
+    /// Wrapper for SharePoint Online list with item and field management capabilities
+    /// </summary>
+    public class SPOList : Context
     {
-       Console.WriteLine("SPOList.Build: Building list: " + this.Name + " - site: " + this.Site);
-       if (this.web == null || this.Ctx.Site.Context.Url != "https://bringglobal.sharepoint.com/" + this.Site)
-       {
-           Console.WriteLine("SPOList.Build: Vou para BuildContext");
-           this.BuildContext();
-           Console.WriteLine("SPOList.Build: Vim de BuildContext");
-        }
-      CamlQuery camlQuery;
-      if (this.CAMLQuery == null)
-      {
-          Console.WriteLine("SPOList.Build: Vou para CamlQuery 1.");
-          camlQuery = CamlQuery.CreateAllItemsQuery();
-          Console.WriteLine("SPOList.Build: Vim de CamlQuery 1.");
-      }
-      else
-      {
-          Console.WriteLine("SPOList.Build: Vou para CamlQuery 2.");
-          camlQuery = new CamlQuery();
-          camlQuery.ViewXml = this.CAMLQuery;
-          Console.WriteLine("SPOList.Build: Vim de CamlQuery 2.");
-      }
-      CamlQuery query = camlQuery;
-      this.list = this.web.Lists.GetByTitle(this.Name);
-      this.ItemCollection = this.list.GetItems(query);
-      this.Fields = this.list.Fields;
-      this.Ctx.Load<List>(this.list, Array.Empty<Expression<Func<List, object>>>());
-      this.Ctx.Load<ListItemCollection>(this.ItemCollection, Array.Empty<Expression<Func<ListItemCollection, object>>>());
-      this.Ctx.Load<FieldCollection>(this.Fields, Array.Empty<Expression<Func<FieldCollection, object>>>());
-      Console.WriteLine("SPOList.Build: Vou para ExecuteQuery");
-      try
-      {
-          this.Ctx.ExecuteQuery();
-      }
-      catch 
-      {
-          System.Console.WriteLine("SPOList.Build: O executeQuery deu erro");
-          throw;
-      }
-      Console.WriteLine("SPOList.Build: Vim de ExecuteQuery");
-    }
+        private List _list;
 
-    public void Update()
-    {
-      this.Ctx.ExecuteQuery();
-      this.Build();
-    }
+        public string CAMLQuery { get; set; }
 
-    public void PropsToString(ListItem item)
-    {
-      Console.WriteLine("Field|InternalName|Value|CBD|Hidden|FieldType|ReadOnly|FromBaseType|Required|ItemValueType");
-      bool flag;
-      foreach (Field field in (ClientObjectCollection<Field>) this.Fields)
-      {
-        try
+        /// <summary>
+        /// Build the list by loading from SharePoint
+        /// </summary>
+        public void Build()
         {
-          object obj = item[field.InternalName];
-          string title = field.Title;
-          flag = obj == null;
-          string str = flag.ToString();
-          Console.WriteLine("We good for: " + title + " .   Is null: " + str);
-          if (obj != null)
-          {
-            if (obj.GetType() == typeof (FieldLookupValue))
+            try
             {
-              object[] objArray = new object[19];
-              objArray[0] = (object) field.Title;
-              objArray[1] = (object) "|";
-              objArray[2] = (object) field.InternalName;
-              objArray[3] = (object) "|";
-              objArray[4] = (object) ((FieldLookupValue) obj).LookupValue;
-              objArray[5] = (object) "|";
-              flag = field.CanBeDeleted;
-              objArray[6] = (object) flag.ToString();
-              objArray[7] = (object) "|";
-              flag = field.Hidden;
-              objArray[8] = (object) flag.ToString();
-              objArray[9] = (object) "|";
-              objArray[10] = (object) field.TypeAsString;
-              objArray[11] = (object) "|";
-              flag = field.ReadOnlyField;
-              objArray[12] = (object) flag.ToString();
-              objArray[13] = (object) "|";
-              flag = field.FromBaseType;
-              objArray[14] = (object) flag.ToString();
-              objArray[15] = (object) "|";
-              flag = field.Required;
-              objArray[16] = (object) flag.ToString();
-              objArray[17] = (object) "|";
-              objArray[18] = (object) obj.GetType();
-              Console.WriteLine(string.Concat(objArray));
+                Logger.Log(2, $"Building list '{Name}' from site '{Site}'");
+
+                if (_web == null)
+                {
+                    BuildContext();
+                }
+
+                // Create CAML query
+                CamlQuery camlQuery = string.IsNullOrEmpty(CAMLQuery)
+                    ? CamlQuery.CreateAllItemsQuery()
+                    : new CamlQuery { ViewXml = CAMLQuery };
+
+                // Load list items
+                _list = _web.Lists.GetByTitle(Name);
+                ItemCollection = _list.GetItems(camlQuery);
+                Fields = _list.Fields;
+
+                // Prepare context for execution
+                Ctx.Load(_list);
+                Ctx.Load(ItemCollection);
+                Ctx.Load(Fields);
+
+                Logger.Log(2, "Executing query to retrieve list items");
+                Ctx.ExecuteQuery();
+
+                Logger.LogDebug($"Successfully loaded {ItemCollection.Count} items from list '{Name}'");
             }
-            else if (obj.GetType() == typeof (FieldUserValue))
+            catch (Exception ex)
             {
-              object[] objArray = new object[19];
-              objArray[0] = (object) field.Title;
-              objArray[1] = (object) "|";
-              objArray[2] = (object) field.InternalName;
-              objArray[3] = (object) "|";
-              objArray[4] = (object) ((FieldLookupValue) obj).LookupId;
-              objArray[5] = (object) "|";
-              flag = field.CanBeDeleted;
-              objArray[6] = (object) flag.ToString();
-              objArray[7] = (object) "|";
-              flag = field.Hidden;
-              objArray[8] = (object) flag.ToString();
-              objArray[9] = (object) "|";
-              objArray[10] = (object) field.TypeAsString;
-              objArray[11] = (object) "|";
-              flag = field.ReadOnlyField;
-              objArray[12] = (object) flag.ToString();
-              objArray[13] = (object) "|";
-              flag = field.FromBaseType;
-              objArray[14] = (object) flag.ToString();
-              objArray[15] = (object) "|";
-              flag = field.Required;
-              objArray[16] = (object) flag.ToString();
-              objArray[17] = (object) "|";
-              objArray[18] = (object) obj.GetType();
-              Console.WriteLine(string.Concat(objArray));
+                Logger.LogError($"Failed to build list '{Name}'", ex);
+                throw;
             }
-            else if (obj.GetType() == typeof (FieldLookupValue[]))
-            {
-              foreach (FieldLookupValue fieldLookupValue in (FieldLookupValue[]) obj)
-              {
-                object[] objArray = new object[19];
-                objArray[0] = (object) field.Title;
-                objArray[1] = (object) "|";
-                objArray[2] = (object) field.InternalName;
-                objArray[3] = (object) "|";
-                objArray[4] = (object) fieldLookupValue.LookupId;
-                objArray[5] = (object) "|";
-                flag = field.CanBeDeleted;
-                objArray[6] = (object) flag.ToString();
-                objArray[7] = (object) "|";
-                flag = field.Hidden;
-                objArray[8] = (object) flag.ToString();
-                objArray[9] = (object) "|";
-                objArray[10] = (object) field.TypeAsString;
-                objArray[11] = (object) "|";
-                flag = field.ReadOnlyField;
-                objArray[12] = (object) flag.ToString();
-                objArray[13] = (object) "|";
-                flag = field.FromBaseType;
-                objArray[14] = (object) flag.ToString();
-                objArray[15] = (object) "|";
-                flag = field.Required;
-                objArray[16] = (object) flag.ToString();
-                objArray[17] = (object) "|";
-                objArray[18] = (object) obj.GetType();
-                Console.WriteLine(string.Concat(objArray));
-              }
-            }
-            else
-            {
-              object[] objArray = new object[19];
-              objArray[0] = (object) field.Title;
-              objArray[1] = (object) "|";
-              objArray[2] = (object) field.InternalName;
-              objArray[3] = (object) "|";
-              objArray[4] = obj;
-              objArray[5] = (object) "|";
-              flag = field.CanBeDeleted;
-              objArray[6] = (object) flag.ToString();
-              objArray[7] = (object) "|";
-              flag = field.Hidden;
-              objArray[8] = (object) flag.ToString();
-              objArray[9] = (object) "|";
-              objArray[10] = (object) field.TypeAsString;
-              objArray[11] = (object) "|";
-              flag = field.ReadOnlyField;
-              objArray[12] = (object) flag.ToString();
-              objArray[13] = (object) "|";
-              flag = field.FromBaseType;
-              objArray[14] = (object) flag.ToString();
-              objArray[15] = (object) "|";
-              flag = field.Required;
-              objArray[16] = (object) flag.ToString();
-              objArray[17] = (object) "|";
-              objArray[18] = (object) obj.GetType();
-              Console.WriteLine(string.Concat(objArray));
-            }
-          }
-          else
-          {
-            object[] objArray = new object[17];
-            objArray[0] = (object) field.Title;
-            objArray[1] = (object) "|";
-            objArray[2] = (object) field.InternalName;
-            objArray[3] = (object) "|NULL|";
-            flag = field.CanBeDeleted;
-            objArray[4] = (object) flag.ToString();
-            objArray[5] = (object) "|";
-            flag = field.Hidden;
-            objArray[6] = (object) flag.ToString();
-            objArray[7] = (object) "|";
-            objArray[8] = (object) field.TypeAsString;
-            objArray[9] = (object) "|";
-            flag = field.ReadOnlyField;
-            objArray[10] = (object) flag.ToString();
-            objArray[11] = (object) "|";
-            flag = field.FromBaseType;
-            objArray[12] = (object) flag.ToString();
-            objArray[13] = (object) "|";
-            flag = field.Required;
-            objArray[14] = (object) flag.ToString();
-            objArray[15] = (object) "|";
-            objArray[16] = (object) obj.GetType();
-            Console.WriteLine(string.Concat(objArray));
-          }
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Refresh list data by re-executing query
+        /// </summary>
+        public void Update()
         {
-          string[] strArray = new string[16];
-          strArray[0] = field.Title;
-          strArray[1] = "|";
-          strArray[2] = field.InternalName;
-          strArray[3] = "|ERROR|";
-          strArray[4] = field.CanBeDeleted.ToString();
-          strArray[5] = "|";
-          flag = field.Hidden;
-          strArray[6] = flag.ToString();
-          strArray[7] = "|";
-          strArray[8] = field.TypeAsString;
-          strArray[9] = "|";
-          flag = field.ReadOnlyField;
-          strArray[10] = flag.ToString();
-          strArray[11] = "|";
-          flag = field.FromBaseType;
-          strArray[12] = flag.ToString();
-          strArray[13] = "|";
-          flag = field.Required;
-          strArray[14] = flag.ToString();
-          strArray[15] = "|CANT GET TYPE";
-          Console.WriteLine(string.Concat(strArray));
-          Console.WriteLine(ex.Message);
+            try
+            {
+                Logger.Log(2, $"Updating list '{Name}'");
+                Ctx.ExecuteQuery();
+                Build();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to update list '{Name}'", ex);
+                throw;
+            }
         }
-      }
+
+        /// <summary>
+        /// Add a new item to the list
+        /// </summary>
+        public ListItem AddItem()
+        {
+            try
+            {
+                ListItem listItem = _list.AddItem(new ListItemCreationInformation());
+                listItem.Update();
+                Logger.LogDebug($"Added new item to list '{Name}'");
+                return listItem;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to add item to list '{Name}'", ex);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Print all properties of a list item for debugging
+        /// </summary>
+        public void PrintItemProperties(ListItem item)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+                sb.AppendLine("Field|InternalName|Value|CanBeDeleted|Hidden|FieldType|ReadOnly|FromBaseType|Required|ItemValueType");
+
+                foreach (Field field in (IEnumerable<Field>)Fields)
+                {
+                    try
+                    {
+                        object fieldValue = item[field.InternalName];
+                        string formattedValue = FormatFieldOutput(field, fieldValue);
+                        sb.AppendLine($"{field.Title}|{field.InternalName}|{formattedValue}|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|{fieldValue?.GetType().Name ?? "NULL"}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning($"Could not retrieve value for field '{field.Title}': {ex.Message}");
+                        sb.AppendLine($"{field.Title}|{field.InternalName}|ERROR|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|ERROR");
+                    }
+                }
+
+                Logger.Log(1, sb.ToString());
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to print item properties", ex);
+            }
+        }
+
+        /// <summary>
+        /// Format field value for display
+        /// </summary>
+        private string FormatFieldOutput(Field field, object value)
+        {
+            if (value == null)
+                return "NULL";
+
+            if (value is FieldLookupValue lookupValue)
+                return lookupValue.LookupValue;
+
+            if (value is FieldUserValue userValue)
+                return userValue.LookupValue;
+
+            if (value is FieldLookupValue[] lookupArray)
+                return string.Join("; ", lookupArray.Select(v => v.LookupValue));
+
+            if (value is FieldUserValue[] userArray)
+                return string.Join("; ", userArray.Select(v => v.LookupValue));
+
+            return value.ToString();
+        }
     }
-            
-    public ListItem AddItem()
-    {
-      ListItem listItem = this.list.AddItem(new ListItemCreationInformation());
-      listItem.Update();
-      return listItem;
-    }
-  }
 }

@@ -18,9 +18,9 @@ namespace Bring.XmlConfig
 
         public static void SetConfigPath(string path)
         {
-            Console.WriteLine($"Setting configuration path to: {path}");
+            Logger.LogDebug($"Setting configuration path to: {path}");
             _configPath = path;
-            _xmlDoc = null; // força recarregar se já estava carregado
+            _xmlDoc = null; // Force reload if already loaded
         }
 
         /// <summary>
@@ -37,12 +37,12 @@ namespace Bring.XmlConfig
                 {
                     _xmlDoc = new XmlDocument();
                     _xmlDoc.Load(_configPath);
-                    Logger.Log(2, "Configuration file loaded successfully from " + _configPath);
+                    Logger.LogDebug($"Configuration file loaded successfully from {_configPath}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("Failed to load configuration file: " + ex.Message);
-                    throw new Exception("Error loading configuration file: " + ex.Message);
+                    Logger.LogError($"Failed to load configuration file from {_configPath}", ex);
+                    throw new Exception($"Error loading configuration file: {ex.Message}", ex);
                 }
             }
         }
@@ -251,6 +251,45 @@ namespace Bring.XmlConfig
             {
                 Console.WriteLine("Error retrieving SQL connection string: " + ex.Message);
                 throw new InvalidOperationException("Failed to retrieve SQL connection string.", ex);
+            }
+        }
+
+        /// <summary>
+        /// Retrieves the SharePoint base URL from the configuration file.
+        /// Returns null if not configured, allowing for a default fallback URL.
+        /// </summary>
+        /// <returns>The SharePoint base URL (e.g., https://tenant.sharepoint.com), or null if not configured.</returns>
+        public static string GetSharePointBaseUrl()
+        {
+            LoadConfig();
+
+            try
+            {
+                var spNode = _xmlDoc.SelectSingleNode("//Configuration/SharePoint");
+                if (spNode == null)
+                    return null;
+
+                var baseUrlNode = spNode.SelectSingleNode("BaseUrl");
+                if (baseUrlNode == null)
+                {
+                    Logger.LogDebug("SharePoint BaseUrl not configured in XML, using default.");
+                    return null;
+                }
+
+                string baseUrl = baseUrlNode.InnerText.Trim();
+                if (string.IsNullOrEmpty(baseUrl))
+                {
+                    Logger.LogDebug("SharePoint BaseUrl is empty, using default.");
+                    return null;
+                }
+
+                Logger.LogDebug($"SharePoint base URL retrieved: {baseUrl}");
+                return baseUrl;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug($"Error retrieving SharePoint base URL: {ex.Message}");
+                return null; // Return null to use default
             }
         }
 

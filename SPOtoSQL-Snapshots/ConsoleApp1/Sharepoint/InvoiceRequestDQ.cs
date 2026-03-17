@@ -1,6 +1,7 @@
 ﻿using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
+using Bring.SPODataQuality;
 
 namespace Bring.Sharepoint
 {
@@ -8,130 +9,155 @@ namespace Bring.Sharepoint
     /// Handles backfilling approver fields for 'invoice request' items
     /// based on recent Unit list changes.
     /// </summary>
-    internal class InvoiceRequestDQ
+    internal class InvoiceRequestDQ : DataQualityBase
     {
-        /// <summary>
-        /// Authenticated SharePoint user context for operations.
-        /// </summary>
-        public SPOUser Me { get; set; }
+        private const string INVOICE_LIST = "invoice request";
+        private const string INVOICE_SITE = "selfservice/invoicerequest";
+        private const string UNIT_LIST = "Unit";
+        private const string UNIT_SITE = "seed";
+        private const string MAIN_APPROVER_FIELD = "Main_x0020_approver";
+        private const string OPTIONAL_APPROVER_FIELD = "Optional_x0020_approver";
+        private const string FINANCIAL_APPROVER_FIELD = "Financial_x0020_approver";
+        private const string UNIT_LOOKUP_FIELD = "Unit_x002f_Project_x003a_Project0";
+        private const string PROJECT_ID_FIELD = "Project_x0020_ID";
+        private const int LOOKBACK_DAYS = 3;
 
         /// <summary>
+        /// Initializes a new InvoiceRequestDQ instance with a SharePoint user context.
+        /// </summary>
+        /// <param name="user">The authenticated SharePoint user.</param>
+        public InvoiceRequestDQ(SPOUser user) : base(user)
+        {
+        }
+
+        /// <summary>
+        /// Executes the data quality operation.
         /// Updates Invoice Request items modified in the last 3 days,
         /// setting approvers from the Unit list lookup.
         /// </summary>
-        /// <returns>True when complete; exceptions may bubble out.</returns>
-        public bool UpdateApprovers()
+        /// <returns>True if processing completed successfully.</returns>
+        public override bool Execute()
         {
-            // Calculate cutoff date (3 days ago at midnight UTC)
-            DateTime cutoff = DateTime.Today.AddDays(-3);
-            string cutoffIso = $"{cutoff:yyyy-MM-dd}T00:00:00Z";
-
-            // Build CAML to fetch Unit items modified since cutoff
-            string unitQuery =
-                "<View><Query><Where>"
-              + $"<Geq><FieldRef Name='Modified' /><Value Type='DateTime'>{cutoffIso}</Value></Geq>"
-              + "</Where></Query></View>";
-
-            // Load recent Unit list items into a dictionary by Project ID
-            var unitList = new SPOList
+            try
             {
-                SPOUser = Me,
-                Name = "Unit",
-                Site = "seed",
-                CAMLQuery = unitQuery
-            };
-            unitList.Build();
+                Logger.LogWarning("Starting Invoice Request approver update operation");
 
-            var unitMap = new Dictionary<string, ListItem>();
-            foreach (ListItem unit in unitList.ItemCollection)
-            {
-                // Use Project_x0020_ID as key
-                string projectId = (string)unit["Project_x0020_ID"];
-                unitMap[projectId] = unit;
-            }
+                // Calculate cutoff date
+                DateTime cutoff = DateTime.Today.AddDays(-LOOKBACK_DAYS);
+                string cutoffIso = $"{cutoff:yyyy-MM-dd}T00:00:00Z";
 
-            // If no recent units, nothing to update
-            if (unitMap.Count == 0) return true;
+                // Build CAML to fetch Unit items modified since cutoff
+                string unitQuery =
+                    "<View><Query><Where>" +
+                    $"<Geq><FieldRef Name='Modified' /><Value Type='DateTime'>{cutoffIso}</Value></Geq>" +
+                    "</Where></Query></View>";
 
-            // Build CAML for invoice requests whose Unit lookup matches our keys
-            string invoiceQuery = QueryBuilder(unitMap);
-            var invoiceList = new SPOList
-            {
-                SPOUser = Me,
-                Name = "invoice request",
-                Site = "selfservice/invoicerequest",
-                CAMLQuery = invoiceQuery
-            };
-            invoiceList.Build();
+                // Load recent Unit list items into a dictionary by Project ID
+                var unitList = CreateAndBuildList(UNIT_LIST, UNIT_SITE, unitQuery);
 
-            int batchCount = 0;
-            // Iterate and copy approver fields from Unit to Invoice Request
-            foreach (ListItem inv in invoiceList.ItemCollection)
-            {
-                // Lookup matching Unit item
-                var lookup = (FieldLookupValue)inv["Unit_x002f_Project_x003a_Project0"];
-                ListItem unitItem = unitMap[lookup.LookupValue];
-
-                // Copy approvers
-                inv["Main_x0020_approver"] = unitItem["Main_x0020_approver"];
-                inv["Optional_x0020_approver"] = unitItem["Optional_x0020_approver"];
-                inv["Financial_x0020_approver"] = unitItem["Financial_x0020_approver"];
-                inv.Update();
-
-                // Execute in batches of 80 to avoid throttling
-                if (++batchCount % 80 == 0)
+                var unitMap = new Dictionary<string, ListItem>();
+                foreach (ListItem unit in unitList.ItemCollection)
                 {
-                    invoiceList.Ctx.ExecuteQuery();
+                    var projectId = GetFieldValue<string>(unit, PROJECT_ID_FIELD);
+                    if (projectId != null)
+                    {
+                        unitMap[projectId] = unit;
+                    }
                 }
+
+                // If no recent units, nothing to update
+                if (unitMap.Count == 0)
+                {
+                    Logger.LogWarning($"No Unit list items modified in the last {LOOKBACK_DAYS} days");
+                    return true;
+                }
+
+                Logger.LogDebug($"Found {unitMap.Count} recently modified Unit items");
+
+                // Build CAML for invoice requests whose Unit lookup matches our keys
+                string invoiceQuery = BuildInvoiceQuery(unitMap);
+                var invoiceList = CreateAndBuildList(INVOICE_LIST, INVOICE_SITE, invoiceQuery);
+
+                if (invoiceList.ItemCollection.Count == 0)
+                {
+                    Logger.LogWarning("No Invoice Request items found to update");
+                    return true;
+                }
+
+                Logger.LogDebug($"Found {invoiceList.ItemCollection.Count} Invoice Request items to process");
+
+                // Process and update approvers in batches
+                ProcessListItemsInBatches(invoiceList, item =>
+                {
+                    try
+                    {
+                        var lookup = GetFieldValue<FieldLookupValue>(item, UNIT_LOOKUP_FIELD);
+                        if (lookup != null && unitMap.TryGetValue(lookup.LookupValue, out var unitItem))
+                        {
+                            // Copy all approver fields from Unit to Invoice Request
+                            SetFieldValue(item, MAIN_APPROVER_FIELD, unitItem[MAIN_APPROVER_FIELD]);
+                            SetFieldValue(item, OPTIONAL_APPROVER_FIELD, unitItem[OPTIONAL_APPROVER_FIELD]);
+                            SetFieldValue(item, FINANCIAL_APPROVER_FIELD, unitItem[FINANCIAL_APPROVER_FIELD]);
+                            item.Update();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogDebug($"Failed to update invoice item {item.Id}: {ex.Message}");
+                    }
+                });
+
+                Logger.LogWarning("Completed Invoice Request approver update operation");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to update invoice request data quality", ex);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Constructs a CAML query that matches invoice requests to recently updated units.
+        /// </summary>
+        private string BuildInvoiceQuery(Dictionary<string, ListItem> unitMap)
+        {
+            if (unitMap.Count == 0)
+                return "<View><Query></Query></View>";
+
+            // Build nested <Or> clauses for all unit keys
+            string xml = "<View><Query><Where>";
+            
+            // Add opening <Or> tags for all conditions except the first
+            for (int i = 1; i < unitMap.Count; i++)
+            {
+                xml += "<Or>";
             }
 
-            // Execute any remaining updates
-            Console.WriteLine("Executing last query");
-            invoiceList.Ctx.ExecuteQuery();
-            Console.WriteLine("Done executing last query");
-
-            return true;
-        }
-
-        /// <summary>
-        /// Pads single-digit numbers with leading zero.
-        /// </summary>
-        private string PadStr(int i)
-        {
-            return i < 10 ? "0" + i : i.ToString();
-        }
-
-        /// <summary>
-        /// Constructs a CAML query string that ORs Eq conditions
-        /// for each Unit key in the dictionary.
-        /// </summary>
-        private string QueryBuilder(Dictionary<string, ListItem> unitMap)
-        {
-            // Start the <Where> clause, prepending nested <Or> as needed
-            string xml = OrAppend("<View><Query><Where>", unitMap.Count);
             bool first = true;
             foreach (var key in unitMap.Keys)
             {
-                // Add an Eq statement for each Project key
-                xml += $"<Eq><FieldRef Name='Unit_x002f_Project_x003a_Project0' />"
-                     + $"<Value Type='Text'>{key}</Value></Eq>";
+                xml += $"<Eq><FieldRef Name='{UNIT_LOOKUP_FIELD}' />" +
+                       $"<Value Type='Text'>{EscapeXmlValue(key)}</Value></Eq>";
+                
                 if (!first) xml += "</Or>";
                 first = false;
             }
+
             xml += "</Where></Query></View>";
             return xml;
         }
 
         /// <summary>
-        /// Recursively appends <Or> tags for a CAML query
-        /// based on the number of clauses required.
+        /// Escapes special XML characters in field values.
         /// </summary>
-        private string OrAppend(string xml, int count)
+        private string EscapeXmlValue(string value)
         {
-            if (count <= 1)
-                return xml;
-            // Nest one <Or> and recurse for remaining count - 1
-            return OrAppend(xml + "<Or>", count - 1);
+            return value?.Replace("&", "&amp;")
+                       ?.Replace("<", "&lt;")
+                       ?.Replace(">", "&gt;")
+                       ?.Replace("\"", "&quot;")
+                       ?.Replace("'", "&apos;") ?? "";
         }
     }
 }
