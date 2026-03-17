@@ -40,8 +40,18 @@ namespace Bring.Sharepoint
         /// <returns>An initialized SPOList object.</returns>
         protected SPOList CreateAndBuildList(string listName, string site, string camlQuery = null)
         {
+            if (string.IsNullOrWhiteSpace(listName))
+            {
+                throw new ArgumentException("List name cannot be null or empty", nameof(listName));
+            }
+
+            if (string.IsNullOrWhiteSpace(site))
+            {
+                throw new ArgumentException("Site cannot be null or empty", nameof(site));
+            }
+
             Logger.LogDebug($"Creating list '{listName}' on site '{site}'");
-            
+
             var list = new SPOList
             {
                 Name = listName,
@@ -71,6 +81,16 @@ namespace Bring.Sharepoint
         /// <param name="batchSize">Number of items to process before calling ExecuteQuery. Default is 80.</param>
         protected void ProcessListItemsInBatches(SPOList list, Action<ListItem> processor, int batchSize = 80)
         {
+            if (processor == null)
+            {
+                throw new ArgumentNullException(nameof(processor), "Item processor delegate cannot be null");
+            }
+
+            if (batchSize <= 0)
+            {
+                throw new ArgumentException("batchSize must be greater than 0", nameof(batchSize));
+            }
+
             if (list?.ItemCollection == null || list.ItemCollection.Count == 0)
             {
                 Logger.LogDebug($"No items to process in list '{list?.Name}'");
@@ -83,7 +103,7 @@ namespace Bring.Sharepoint
                 foreach (ListItem item in list.ItemCollection)
                 {
                     processor(item);
-                    
+
                     if (++batchCount % batchSize == 0)
                     {
                         Logger.LogDebug($"Executing batch query after {batchCount} items");

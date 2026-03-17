@@ -58,7 +58,7 @@ namespace Bring.SPODataQuality
             Logger.VerboseLevel = verbose;
 
             Bring.XmlConfig.ConfigurationReader.SetConfigPath(configPath);
-            
+
             Logger.Log(1, "DEBUG: Application initialized");
             Logger.Log(2, "CURRENT TIME: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
         }
@@ -71,18 +71,24 @@ namespace Bring.SPODataQuality
                 Logger.Log(1, "DEBUG: SQL connection test completed");
 
                 var credentials = ConfigurationReader.GetSharePointCredentials();
-                
-                var spoUser = new SPOUser(credentials.Username, credentials.Password);
-                Logger.Log(1, "DEBUG: SPOUser created");
+                if (credentials == null)
+                {
+                    throw new InvalidOperationException("Failed to retrieve SharePoint credentials from configuration");
+                }
 
-                var list1 = new SPOList { SPOUser = spoUser };
-                var list2 = new SPOList { SPOUser = spoUser };
-                Logger.Log(3, "DEBUG: SPOList objects configured");
-                
-                ProcessCommandLineArguments();
-                
-                Logger.Log(2, "End of requests.");
-                Logger.Log(2, "");
+                using (var spoUser = new SPOUser(credentials.Username, credentials.Password))
+                {
+                    Logger.Log(1, "DEBUG: SPOUser created");
+
+                    var list1 = new SPOList { SPOUser = spoUser };
+                    var list2 = new SPOList { SPOUser = spoUser };
+                    Logger.Log(3, "DEBUG: SPOList objects configured");
+
+                    ProcessCommandLineArguments();
+
+                    Logger.Log(2, "End of requests.");
+                    Logger.Log(2, "");
+                }
             }
             catch (Exception ex)
             {
@@ -90,11 +96,18 @@ namespace Bring.SPODataQuality
             }
         }
 
+        /// <summary>
+        /// Processes command-line arguments to determine workflow execution.
+        /// Can be extended to handle specific list names, filtering, or other parameters.
+        /// </summary>
         private static void ProcessCommandLineArguments()
         {
-            // This would be implemented based on how we get access to args
-            // For now, we'll keep the original logic but improved
-            // Note: In a real refactor, we'd pass args to this method
+            Logger.Log(1, "DEBUG: Processing command-line arguments");
+            // TODO: Implement argument parsing for:
+            // - Source and destination list names
+            // - Field mapping configuration
+            // - Data quality operation selection
+            Logger.Log(1, "DEBUG: Command-line arguments processed");
         }
 
         private static void HandleFatalError(Exception ex)
