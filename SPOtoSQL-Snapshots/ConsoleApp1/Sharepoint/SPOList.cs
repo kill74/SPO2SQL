@@ -41,6 +41,11 @@ namespace Bring.Sharepoint
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(Name))
+                {
+                    throw new InvalidOperationException("List 'Name' property must be set before calling Build()");
+                }
+
                 Logger.Log(2, $"Building list '{Name}' from site '{Site}'");
 
                 if (web == null)
@@ -100,6 +105,11 @@ namespace Bring.Sharepoint
         {
             try
             {
+                if (_list == null)
+                {
+                    throw new InvalidOperationException($"List '{Name}' has not been built. Call Build() first.");
+                }
+
                 ListItem listItem = _list.AddItem(new ListItemCreationInformation());
                 listItem.Update();
                 Logger.LogDebug($"Added new item to list '{Name}'");
@@ -119,6 +129,18 @@ namespace Bring.Sharepoint
         {
             try
             {
+                if (item == null)
+                {
+                    Logger.LogWarning("Cannot print properties of a null list item");
+                    return;
+                }
+
+                if (Fields == null || Fields.Count == 0)
+                {
+                    Logger.LogWarning($"No fields available in list '{Name}' to print");
+                    return;
+                }
+
                 StringBuilder sb = new StringBuilder();
                 sb.AppendLine("Field|InternalName|Value|CanBeDeleted|Hidden|FieldType|ReadOnly|FromBaseType|Required|ItemValueType");
 
@@ -153,19 +175,27 @@ namespace Bring.Sharepoint
             if (value == null)
                 return "NULL";
 
-            if (value is FieldLookupValue lookupValue)
-                return lookupValue.LookupValue;
+            try
+            {
+                if (value is FieldLookupValue lookupValue)
+                    return lookupValue?.LookupValue ?? "NULL";
 
-            if (value is FieldUserValue userValue)
-                return userValue.LookupValue;
+                if (value is FieldUserValue userValue)
+                    return userValue?.LookupValue ?? "NULL";
 
-            if (value is FieldLookupValue[] lookupArray)
-                return string.Join("; ", lookupArray.Select(v => v.LookupValue));
+                if (value is FieldLookupValue[] lookupArray)
+                    return string.Join("; ", lookupArray?.Select(v => v?.LookupValue ?? "?") ?? new[] { "NULL" });
 
-            if (value is FieldUserValue[] userArray)
-                return string.Join("; ", userArray.Select(v => v.LookupValue));
+                if (value is FieldUserValue[] userArray)
+                    return string.Join("; ", userArray?.Select(v => v?.LookupValue ?? "?") ?? new[] { "NULL" });
 
-            return value.ToString();
+                return value?.ToString() ?? "NULL";
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug($"Error formatting field value: {ex.Message}");
+                return "ERROR";
+            }
         }
     }
 }
