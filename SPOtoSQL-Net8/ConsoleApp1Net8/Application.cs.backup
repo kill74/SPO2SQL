@@ -1,0 +1,629 @@
+using System.Diagnostics;
+using Bring.Configuration;
+
+namespace Bring;
+
+/// <summary>
+/// Main application logic as a hosted service.
+/// Demonstrates modern structured logging patterns using ILogger&lt;T&gt;.
+/// </summary>
+public partial class Application : IHostedService
+{
+    private readonly ILogger<Application> _logger;
+    private readonly IHostApplicationLifetime _lifetime;
+    private readonly ApplicationOptions _appOptions;
+    private readonly SharePointOptions _sharePointOptions;
+    private readonly SqlOptions _sqlOptions;
+
+    // Correlation ID for tracking operations across the application lifecycle
+    private readonly string _correlationId = Guid.NewGuid().ToString("N");
+
+    public Application(
+        ILogger<Application> logger,
+        IHostApplicationLifetime lifetime,
+        IOptions<ApplicationOptions> appOptions,
+        IOptions<SharePointOptions> sharePointOptions,
+        IOptions<SqlOptions> sqlOptions)
+    {
+        _logger = logger;
+        _lifetime = lifetime;
+        _appOptions = appOptions.Value;
+        _sharePointOptions = sharePointOptions.Value;
+        _sqlOptions = sqlOptions.Value;
+
+        // Log at Debug level - useful for diagnostics but not in production by default
+        LogApplicationConstructed(_logger, _correlationId);
+    }
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        // Use log scope to add correlation ID to all log entries within this scope
+        using (_logger.BeginScope(new Dictionary<string, object>
+        {
+            ["CorrelationId"] = _correlationId,
+            ["Operation"] = "ApplicationStart"
+        }))
+        {
+            // High-performance structured logging using LoggerMessage source generator
+            LogApplicationStarting(_logger, _appOptions.Name, _appOptions.Version, _appOptions.Environment);
+
+            // Start the actual work in a background task
+            _ = Task.Run(async () => await ExecuteAsync(cancellationToken), cancellationToken);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ExecuteAsync(CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var itemsProcessed = 0;
+
+        try
+        {
+            // Use scope to group all logs from the execution phase
+            using (_logger.BeginScope(new Dictionary<string, object>
+            {
+                ["CorrelationId"] = _correlationId,
+                ["Operation"] = "DataSynchronization"
+            }))
+            {
+                LogExecutionStarted(_logger);
+
+                // Log configuration details with structured properties
+                LogSharePointConfiguration(_logger, _sharePointOptions.SiteUrl, _sharePointOptions.TimeoutSeconds);
+                LogSqlConfiguration(_logger, _sqlOptions.BatchSize, _sqlOptions.CommandTimeoutSeconds);
+
+                // Simulate some processing with detailed logging
+                await ProcessDataAsync(cancellationToken);
+
+                // Simulate success metrics
+                itemsProcessed = 42; // This would be actual count in real implementation
+
+                stopwatch.Stop();
+
+                // Log completion with metrics - Information level for production monitoring
+                LogExecutionCompleted(_logger, itemsProcessed, stopwatch.ElapsedMilliseconds);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Warning level - expected during graceful shutdown
+            LogExecutionCancelled(_logger);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+
+            // Error level with exception - includes full stack trace and structured properties
+            LogExecutionFailed(_logger, ex, ex.Message, stopwatch.ElapsedMilliseconds, itemsProcessed);
+            Environment.ExitCode = 1;
+        }
+        finally
+        {
+            // Stop the application
+            _lifetime.StopApplication();
+        }
+    }
+
+    private async Task ProcessDataAsync(CancellationToken cancellationToken)
+    {
+        // Simulate data processing phases with detailed logging
+        using (_logger.BeginScope("Phase: {Phase}", "DataRetrieval"))
+        {
+            LogPhaseStarted(_logger, "DataRetrieval");
+
+            // Debug logging - detailed diagnostic info
+            _logger.LogDebug("Connecting to SharePoint with timeout: {Timeout}s", 30);
+
+            // Simulate work
+            await Task.Delay(100, cancellationToken);
+
+            LogPhaseCompleted(_logger, "DataRetrieval", 50);
+        }
+
+        using (_logger.BeginScope("Phase: {Phase}", "DataTransformation"))
+        {
+            LogPhaseStarted(_logger, "DataTransformation");
+
+            // Warning example - unexpected but handled
+            if (_sqlOptions.BatchSize > 1000)
+            {
+                LogLargeBatchSizeWarning(_logger, _sqlOptions.BatchSize, 1000);
+            }
+
+            await Task.Delay(100, cancellationToken);
+
+            LogPhaseCompleted(_logger, "DataTransformation", 30);
+        }
+
+        using (_logger.BeginScope("Phase: {Phase}", "DataPersistence"))
+        {
+            LogPhaseStarted(_logger, "DataPersistence");
+
+            // Simulate validation
+            if (string.IsNullOrWhiteSpace(_sqlOptions.ConnectionString))
+            {
+                throw new InvalidOperationException("SQL connection string is not configured");
+            }
+
+            await Task.Delay(100, cancellationToken);
+
+            LogPhaseCompleted(_logger, "DataPersistence", 100);
+        }
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        using (_logger.BeginScope(new Dictionary<string, object>
+        {
+            ["CorrelationId"] = _correlationId,
+            ["Operation"] = "ApplicationStop"
+        }))
+        {
+            LogApplicationStopping(_logger, _appOptions.Name);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    #region High-Performance LoggerMessage Source Generators
+
+    // LoggerMessage source generators provide zero-allocation logging with compile-time optimization
+    // Best practice: Use for frequently called log statements in hot paths
+
+    [LoggerMessage(
+        EventId = 1001,
+        Level = LogLevel.Debug,
+        Message = "Application instance constructed with CorrelationId: {CorrelationId}")]
+    private static partial void LogApplicationConstructed(ILogger logger, string correlationId);
+
+    [LoggerMessage(
+        EventId = 1002,
+        Level = LogLevel.Information,
+        Message = "{ApplicationName} v{Version} starting in {Environment} mode")]
+    private static partial void LogApplicationStarting(ILogger logger, string applicationName, string version, string environment);
+
+    [LoggerMessage(
+        EventId = 1003,
+        Level = LogLevel.Information,
+        Message = "Execution started - beginning data synchronization")]
+    private static partial void LogExecutionStarted(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 1004,
+        Level = LogLevel.Information,
+        Message = "SharePoint configuration - SiteUrl: {SiteUrl}, Timeout: {TimeoutSeconds}s")]
+    private static partial void LogSharePointConfiguration(ILogger logger, string siteUrl, int timeoutSeconds);
+
+    [LoggerMessage(
+        EventId = 1005,
+        Level = LogLevel.Information,
+        Message = "SQL configuration - BatchSize: {BatchSize}, CommandTimeout: {CommandTimeout}s")]
+    private static partial void LogSqlConfiguration(ILogger logger, int batchSize, int commandTimeout);
+
+    [LoggerMessage(
+        EventId = 1006,
+        Level = LogLevel.Information,
+        Message = "Execution completed successfully - ProcessedItems: {ProcessedItems}, Duration: {DurationMs}ms")]
+    private static partial void LogExecutionCompleted(ILogger logger, int processedItems, long durationMs);
+
+    [LoggerMessage(
+        EventId = 1007,
+        Level = LogLevel.Warning,
+        Message = "Execution cancelled - graceful shutdown requested")]
+    private static partial void LogExecutionCancelled(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 1008,
+        Level = LogLevel.Error,
+        Message = "Execution failed - Error: {ErrorMessage}, Duration: {DurationMs}ms, ItemsProcessed: {ItemsProcessed}")]
+    private static partial void LogExecutionFailed(ILogger logger, Exception exception, string errorMessage, long durationMs, int itemsProcessed);
+
+    [LoggerMessage(
+        EventId = 1009,
+        Level = LogLevel.Information,
+        Message = "Processing phase '{PhaseName}' started")]
+    private static partial void LogPhaseStarted(ILogger logger, string phaseName);
+
+    [LoggerMessage(
+        EventId = 1010,
+        Level = LogLevel.Information,
+        Message = "Processing phase '{PhaseName}' completed - Duration: {DurationMs}ms")]
+    private static partial void LogPhaseCompleted(ILogger logger, string phaseName, long durationMs);
+
+    [LoggerMessage(
+        EventId = 1011,
+        Level = LogLevel.Warning,
+        Message = "Large batch size detected - Current: {CurrentBatchSize}, Recommended: {RecommendedBatchSize}. This may impact performance.")]
+    private static partial void LogLargeBatchSizeWarning(ILogger logger, int currentBatchSize, int recommendedBatchSize);
+
+    [LoggerMessage(
+        EventId = 1012,
+        Level = LogLevel.Information,
+        Message = "{ApplicationName} stopping")]
+    private static partial void LogApplicationStopping(ILogger logger, string applicationName);
+
+    #endregion
+
+    #region Pattern Matching Examples with OperationResult
+
+    /*
+     * PATTERN MATCHING USAGE EXAMPLES
+     * ================================
+     * The following examples demonstrate how to use the OperationResult<T> utility class
+     * with modern C# pattern matching features throughout the application.
+     */
+
+    // Example 1: Basic Success/Failure Pattern
+    // Demonstrates: Creating and using operation results with is/is not patterns
+    private static void Example1_BasicUsage()
+    {
+        // Creating results
+        var successResult = OperationResult<int>.Success(42);
+        var failureResult = OperationResult<int>.Failure("Something went wrong", "ERROR_001");
+
+        // Using is pattern
+        if (successResult is OperationResult<int>.SuccessResult success)
+        {
+            Console.WriteLine($"Success! Value: {success.Value}");
+        }
+
+        // Using is not pattern
+        if (failureResult is not OperationResult<int>.SuccessResult)
+        {
+            Console.WriteLine("Operation failed");
+        }
+
+        // Using extension methods
+        var isSuccess = successResult.IsSuccess(); // true
+        var isFailure = failureResult.IsFailure(); // true
+    }
+
+    // Example 2: Switch Expressions with Pattern Matching
+    // Demonstrates: Processing results with switch expressions
+    private static string Example2_SwitchExpression(OperationResult<string> result) =>
+        result switch
+        {
+            OperationResult<string>.SuccessResult { Value: var value } => $"Got: {value}",
+            OperationResult<string>.FailureResult { Error: var error, ErrorCode: var code } =>
+                $"Failed with code {code}: {error}",
+            _ => "Unknown result"
+        };
+
+    // Example 3: Property Patterns for Error Categorization
+    // Demonstrates: Advanced property patterns with when guards
+    private static void Example3_ErrorCategorization(OperationResult<object> result)
+    {
+        var message = result switch
+        {
+            // Success case
+            OperationResult<object>.SuccessResult => "Operation successful",
+
+            // Authentication errors
+            OperationResult<object>.FailureResult { ErrorCode: "Auth401" } =>
+                "Authentication required",
+            OperationResult<object>.FailureResult { ErrorCode: "Auth403" } =>
+                "Access forbidden",
+
+            // Validation errors with pattern matching on error code prefix
+            OperationResult<object>.FailureResult { ErrorCode: var code }
+                when code?.StartsWith("Validation") == true =>
+                "Validation failed - check your input",
+
+            // Network-related errors (recoverable)
+            OperationResult<object>.FailureResult { ErrorCode: "Timeout" or "NetworkError" } =>
+                "Network issue - please retry",
+
+            // Exceptions
+            OperationResult<object>.FailureResult { Exception: not null } exception =>
+                $"Exception occurred: {exception.Exception?.GetType().Name}",
+
+            // General failure
+            OperationResult<object>.FailureResult failure =>
+                $"Operation failed: {failure.Error}",
+
+            _ => "Unknown state"
+        };
+
+        Console.WriteLine(message);
+    }
+
+    // Example 4: Chaining Operations with Map and Bind
+    // Demonstrates: Functional programming patterns with pattern matching
+    private static async Task<OperationResult<int>> Example4_ChainingOperations()
+    {
+        // Simulated data fetching
+        var fetchResult = await FetchDataAsync();
+
+        // Map transforms success values (string length to int)
+        var lengthResult = fetchResult.Map(data => data.Length);
+
+        // Bind chains operations that return OperationResult
+        var processedResult = lengthResult.Bind(length =>
+            length > 0
+                ? OperationResult<int>.Success(length * 2)
+                : OperationResult<int>.Failure("Empty data"));
+
+        return processedResult;
+    }
+
+    private static Task<OperationResult<string>> FetchDataAsync() =>
+        Task.FromResult(OperationResult<string>.Success("Sample Data"));
+
+    // Example 5: Pattern Matching with Collections
+    // Demonstrates: Working with multiple results using list patterns
+    private static void Example5_CollectionPatterns()
+    {
+        var results = new[]
+        {
+            OperationResult<int>.Success(1),
+            OperationResult<int>.Success(2),
+            OperationResult<int>.Failure("Error 1"),
+            OperationResult<int>.Success(3)
+        };
+
+        // Check if all successful
+        var allSuccess = results.AllSuccessful(); // false
+
+        // Get successful values only
+        var successfulValues = results.GetSuccessfulValues().ToList(); // [1, 2, 3]
+
+        // Get all errors
+        var errors = results.GetErrors().ToList(); // ["Error 1"]
+
+        // Partition into success/failure groups
+        var (successful, failed) = results.Partition();
+        Console.WriteLine($"Success: {successful.Count}, Failed: {failed.Count}");
+
+        // Combine all results into one
+        var combinedResult = results.Combine();
+        var outcome = combinedResult switch
+        {
+            OperationResult<IReadOnlyList<int>>.SuccessResult success =>
+                $"All succeeded: {string.Join(", ", success.Value)}",
+            OperationResult<IReadOnlyList<int>>.FailureResult failure =>
+                $"Some failed: {failure.Error}",
+            _ => "Unknown"
+        };
+    }
+
+    // Example 6: List Pattern Matching
+    // Demonstrates: Modern C# 11 list patterns
+    private static string Example6_ListPatterns(OperationResult<string>[] results) =>
+        results switch
+        {
+            // Empty array
+            [] => "No results",
+
+            // Single success
+            [OperationResult<string>.SuccessResult { Value: var v }] =>
+                $"Single success: {v}",
+
+            // First is failure
+            [OperationResult<string>.FailureResult, ..] =>
+                "First operation failed",
+
+            // All successes (using when guard)
+            var r when r.All(x => x is OperationResult<string>.SuccessResult) =>
+                "All operations succeeded",
+
+            // Mixed results
+            _ => "Mixed results"
+        };
+
+    // Example 7: Validation with Pattern Matching
+    // Demonstrates: Using ValidationResult for complex validation
+    private static void Example7_ValidationPatterns()
+    {
+        var username = "john_doe";
+        var age = 25;
+        var items = new[] { "item1", "item2" };
+
+        // Individual validations using pattern matching
+        var usernameValidation = username.ValidateNotEmpty("Username");
+        var ageValidation = age.ValidateRange(18, 100, "Age");
+        var itemsValidation = items.ValidateCollection("Items", minCount: 1, maxCount: 10);
+
+        // Combine validations
+        var combinedValidation = ValidationResult.Combine(
+            usernameValidation,
+            ageValidation,
+            itemsValidation
+        );
+
+        // Pattern match on the result
+        var message = combinedValidation switch
+        {
+            ValidationResult.ValidResult => "All validations passed",
+            ValidationResult.InvalidResult { Errors: var errors } =>
+                $"Validation failed: {string.Join(", ", errors)}",
+            _ => "Unknown validation state"
+        };
+
+        Console.WriteLine(message);
+    }
+
+    // Example 8: Match Action Pattern
+    // Demonstrates: Executing different actions based on result type
+    private static void Example8_MatchActions(OperationResult<string> result)
+    {
+        result.Match(
+            onSuccess: value =>
+            {
+                Console.WriteLine($"Processing successful result: {value}");
+                // Perform success action
+            },
+            onFailure: (error, errorCode) =>
+            {
+                Console.WriteLine($"Handling error {errorCode}: {error}");
+                // Perform failure action (e.g., logging, retry logic)
+            }
+        );
+    }
+
+    // Example 9: Collection Summary with Pattern Matching
+    // Demonstrates: Analyzing collections with pattern matching
+    private static void Example9_CollectionSummary()
+    {
+        var operations = new[]
+        {
+            OperationResult<string>.Success("Op1"),
+            OperationResult<string>.Success("Op2"),
+            OperationResult<string>.Failure("Network timeout", "Timeout"),
+            OperationResult<string>.Failure("Auth failed", "Auth401"),
+            OperationResult<string>.Failure("Auth failed", "Auth401"),
+            OperationResult<string>.Success("Op3")
+        };
+
+        var summary = operations.Summarize();
+
+        // Pattern matching on summary properties
+        var report = summary switch
+        {
+            { SuccessRate: 100 } => "Perfect! All operations succeeded",
+            { SuccessRate: >= 80 } s => $"Good: {s.SuccessCount}/{s.TotalCount} succeeded",
+            { SuccessRate: >= 50 } s => $"Fair: {s.SuccessCount}/{s.TotalCount} succeeded",
+            _ => $"Poor: Only {summary.SuccessCount}/{summary.TotalCount} succeeded"
+        };
+
+        Console.WriteLine($"{report} - Quality: {summary.QualityRating}");
+
+        // Pattern match on error distribution
+        foreach (var (errorCode, count) in summary.ErrorsByCode)
+        {
+            var severity = errorCode switch
+            {
+                var c when c.StartsWith("Auth") => "Critical",
+                "Timeout" or "NetworkError" => "Warning",
+                _ => "Info"
+            };
+            Console.WriteLine($"{severity}: {errorCode} occurred {count} times");
+        }
+    }
+
+    // Example 10: Recoverable Error Detection
+    // Demonstrates: Complex pattern matching for retry logic
+    private static async Task<OperationResult<string>> Example10_RetryPattern(
+        Func<Task<OperationResult<string>>> operation,
+        int maxRetries = 3)
+    {
+        var attempt = 0;
+        OperationResult<string> result;
+
+        do
+        {
+            result = await operation();
+            attempt++;
+
+            // Pattern match to determine if we should retry
+            var shouldRetry = result switch
+            {
+                OperationResult<string>.SuccessResult => false,
+                OperationResult<string>.FailureResult failure when attempt >= maxRetries => false,
+                OperationResult<string>.FailureResult failure => failure.IsRecoverableError(),
+                _ => false
+            };
+
+            if (!shouldRetry) break;
+
+            // Exponential backoff
+            await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)));
+
+        } while (attempt < maxRetries);
+
+        return result;
+    }
+
+    // Example 11: Nested Pattern Matching
+    // Demonstrates: Complex nested patterns for data processing
+    private static void Example11_NestedPatterns(OperationResult<OperationResult<int>> nestedResult)
+    {
+        var outcome = nestedResult switch
+        {
+            // Both levels successful
+            OperationResult<OperationResult<int>>.SuccessResult
+            {
+                Value: OperationResult<int>.SuccessResult { Value: var finalValue }
+            } => $"Nested success: {finalValue}",
+
+            // Outer success, inner failure
+            OperationResult<OperationResult<int>>.SuccessResult
+            {
+                Value: OperationResult<int>.FailureResult { Error: var innerError }
+            } => $"Inner operation failed: {innerError}",
+
+            // Outer failure
+            OperationResult<OperationResult<int>>.FailureResult { Error: var outerError } =>
+                $"Outer operation failed: {outerError}",
+
+            _ => "Unknown nested state"
+        };
+
+        Console.WriteLine(outcome);
+    }
+
+    // Example 12: Real-world SharePoint Operation Pattern
+    // Demonstrates: Practical usage in SharePoint sync context
+    private static async Task<OperationResult<int>> Example12_SharePointSyncOperation()
+    {
+        try
+        {
+            // Validate configuration using pattern matching
+            var configValidation = ValidationResult.Combine(
+                _sharePointOptions.SiteUrl.ValidateNotEmpty("SiteUrl"),
+                _sharePointOptions.TimeoutSeconds.ValidateRange(1, 300, "Timeout")
+            );
+
+            if (configValidation is ValidationResult.InvalidResult { Errors: var errors })
+            {
+                return OperationResult<int>.Failure(
+                    $"Configuration invalid: {string.Join(", ", errors)}",
+                    "ValidationError"
+                );
+            }
+
+            // Simulate fetching data with potential failures
+            var fetchResult = await FetchSharePointDataAsync();
+
+            // Transform and process using pattern matching
+            var processedResult = fetchResult
+                .Map(items => items.Count)
+                .Bind(count => count > 0
+                    ? OperationResult<int>.Success(count)
+                    : OperationResult<int>.Failure("No items found", "EmptyResult"));
+
+            // Log based on result using pattern matching
+            processedResult.Match(
+                onSuccess: count => _logger.LogInformation("Successfully processed {Count} items", count),
+                onFailure: (error, code) => _logger.LogWarning("Processing failed with {Code}: {Error}", code, error)
+            );
+
+            return processedResult;
+        }
+        catch (Exception ex)
+        {
+            return OperationResult<int>.Failure(ex);
+        }
+    }
+
+    private static Task<OperationResult<List<object>>> FetchSharePointDataAsync() =>
+        Task.FromResult(OperationResult<List<object>>.Success(new List<object> { 1, 2, 3 }));
+
+    /*
+     * KEY TAKEAWAYS:
+     * =============
+     * 1. Use records for immutable result types (SuccessResult, FailureResult)
+     * 2. Switch expressions provide concise pattern matching for result handling
+     * 3. Property patterns enable matching on specific error codes or values
+     * 4. Is/is not patterns simplify type checking and success/failure detection
+     * 5. List patterns (C# 11) work with collections of results
+     * 6. Pattern matching enables functional programming patterns (Map, Bind)
+     * 7. Validation results can be combined using pattern matching
+     * 8. Extension methods enhance usability while demonstrating patterns
+     * 9. Pattern matching works well with async operations and retry logic
+     * 10. Real-world usage combines multiple pattern matching techniques
+     */
+
+    #endregion
+}
