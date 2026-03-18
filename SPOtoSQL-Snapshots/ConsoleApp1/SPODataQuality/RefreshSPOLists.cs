@@ -5,9 +5,10 @@ using Microsoft.SharePoint.Client;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using Microsoft.Data.SqlClient;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Threading;
+using System.Data.SqlClient;
 
 namespace Bring.SPODataQuality
 {
@@ -283,13 +284,13 @@ namespace Bring.SPODataQuality
                     SPOUser = spoUser
                 };
                 // Iterate through all lists in the SharePoint site
-                foreach (List allList in (ClientObjectCollection<List>)context.GetAllLists())
+                foreach (Microsoft.SharePoint.Client.List allList in context.GetAllLists())
                 {
                     try
                     {
                         Logger.Log(1, "DEBUG: Loading list - " + allList.Title);
                         // Load the IsSystemList property to determine if the list is a system list
-                        context.Ctx.Load<IList>(allList, new Expression<Func<List, object>>[1]
+                        context.Ctx.Load<IList>(allList, new Expression<Func<Microsoft.SharePoint.Client.List, object>>[1]
                         {
                              l => (object) l.IsSystemList
                         });
