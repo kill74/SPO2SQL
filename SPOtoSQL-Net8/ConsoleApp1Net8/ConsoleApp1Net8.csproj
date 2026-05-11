@@ -40,6 +40,7 @@
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="8.0.8" />
     <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="8.0.8" />
     <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -74,6 +75,11 @@
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Sharepoint\SPOUser.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Sharepoint\TimesheetDQ.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Sharepoint\TwoFactorAuth.cs" />
+    <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Security\CredentialManager.cs" />
+    <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Security\DpapiCredentialProvider.cs" />
+    <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Security\EnvCredentialProvider.cs" />
+    <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Security\ICredentialProvider.cs" />
+    <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Security\XmlCredentialProvider.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\XmlConfig\ConfigHelper.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\ConsoleLogger\Logger.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\AssemblyInfo.cs" />

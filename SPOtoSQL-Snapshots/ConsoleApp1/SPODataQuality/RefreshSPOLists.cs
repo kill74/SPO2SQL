@@ -1,4 +1,5 @@
-﻿using Bring.Sharepoint;
+﻿using Bring.Security;
+using Bring.Sharepoint;
 using Bring.Sqlserver;
 using Bring.XmlConfig;
 using Microsoft.SharePoint.Client;
@@ -20,11 +21,60 @@ namespace Bring.SPODataQuality
             try
             {
                 InitializeApplication(args);
+
+                if (args.Any(a => a.Equals("--setup-secrets", StringComparison.OrdinalIgnoreCase)))
+                {
+                    RunSetupSecrets();
+                    return;
+                }
+
                 RunMainWorkflow();
             }
             catch (Exception ex)
             {
                 HandleFatalError(ex);
+            }
+        }
+
+        private static void RunSetupSecrets()
+        {
+            Console.WriteLine("=== Secure Credential Setup ===");
+            Console.WriteLine("Credentials will be encrypted and stored at:");
+            Console.WriteLine("  %APPDATA%\\SPO2SQL\\credentials.enc");
+            Console.WriteLine();
+
+            Console.Write("SharePoint Username: ");
+            string username = Console.ReadLine()?.Trim();
+            Console.Write("SharePoint Password: ");
+            string password = Console.ReadLine()?.Trim();
+            Console.Write("SQL Connection String: ");
+            string connString = Console.ReadLine()?.Trim();
+
+            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+            {
+                Console.WriteLine("ERROR: Username and password are required.");
+                Environment.Exit(1);
+            }
+
+            try
+            {
+                var dpapi = new DpapiCredentialProvider();
+                dpapi.SaveCredentials(username, password, connString ?? "");
+                Console.WriteLine("Credentials saved securely.");
+            }
+            catch (PlatformNotSupportedException)
+            {
+                Console.WriteLine("ERROR: DPAPI encryption is not available on this platform.");
+                Console.WriteLine("Use environment variables instead:");
+                Console.WriteLine("  set SPO_USERNAME=" + username);
+                Console.WriteLine("  set SPO_PASSWORD=...");
+                Console.WriteLine("  set SQL_CONNECTION_STRING=...");
+                Environment.Exit(1);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("ERROR: Failed to save credentials: " + ex.Message);
+                Environment.Exit(1);
             }
         }
 

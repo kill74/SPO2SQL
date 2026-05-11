@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Xml;
 using Bring.SPODataQuality;
+using Bring.Security;
 using System.Linq;
 
 namespace Bring.XmlConfig
@@ -183,8 +184,15 @@ namespace Bring.XmlConfig
         /// <exception cref="InvalidOperationException">Thrown when required configuration elements are missing or invalid.</exception>
         public static (string Username, string Password) GetSharePointCredentials()
         {
-            LoadConfig();
+            try
+            {
+                return CredentialManager.GetSharePointCredentials();
+            }
+            catch
+            {
+            }
 
+            LoadConfig();
             try
             {
                 var spNode = _xmlDoc.SelectSingleNode("//Configuration/SharePoint");
@@ -196,26 +204,25 @@ namespace Bring.XmlConfig
 
                 if (usernameNode == null)
                     throw new InvalidOperationException("Username element not found in SharePoint configuration.");
-                
+
                 if (passwordNode == null)
                     throw new InvalidOperationException("Password element not found in SharePoint configuration.");
 
                 var username = usernameNode.InnerText.Trim();
                 var password = passwordNode.InnerText.Trim();
 
-                // Basic validation
                 if (string.IsNullOrEmpty(username))
                     throw new InvalidOperationException("Username cannot be empty.");
-                
+
                 if (string.IsNullOrEmpty(password))
                     throw new InvalidOperationException("Password cannot be empty.");
 
-                Logger.Log(2, "SharePoint credentials retrieved successfully.");
+                Logger.Log(2, "SharePoint credentials retrieved successfully from XML config.");
                 return (username, password);
             }
             catch (InvalidOperationException)
             {
-                throw; // Re-throw configuration-specific exceptions
+                throw;
             }
             catch (Exception ex)
             {
@@ -224,16 +231,17 @@ namespace Bring.XmlConfig
             }
         }
 
-        /// <summary>
-        /// Retrieves the SQL Server connection string from the configuration file.
-        /// </summary>
-        /// <returns>The SQL Server connection string.</returns>
-        /// <exception cref="FileNotFoundException">Thrown when the configuration file is not found.</exception>
-        /// <exception cref="InvalidOperationException">Thrown when the connection string configuration is missing or invalid.</exception>
         public static string GetSqlConnectionString()
         {
-            LoadConfig();
+            try
+            {
+                return CredentialManager.GetSqlConnectionString();
+            }
+            catch
+            {
+            }
 
+            LoadConfig();
             try
             {
                 var connNode = _xmlDoc.SelectSingleNode("//Configuration/SQL/ConnectionString");
@@ -244,12 +252,12 @@ namespace Bring.XmlConfig
                 if (string.IsNullOrEmpty(connectionString))
                     throw new InvalidOperationException("SQL connection string cannot be empty.");
 
-                Logger.Log(2, "SQL connection string retrieved successfully.");
+                Logger.Log(2, "SQL connection string retrieved successfully from XML config.");
                 return connectionString;
             }
             catch (InvalidOperationException)
             {
-                throw; // Re-throw configuration-specific exceptions
+                throw;
             }
             catch (Exception ex)
             {

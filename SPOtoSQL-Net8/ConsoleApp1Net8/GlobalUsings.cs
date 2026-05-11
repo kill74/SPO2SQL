@@ -12,4 +12,5 @@ global using Microsoft.Extensions.Hosting;
 global using Bring.SPODataQuality;
 global using Bring.Sharepoint;
 global using Bring.Sqlserver;
+global using Bring.Security;
 global using Bring.XmlConfig;

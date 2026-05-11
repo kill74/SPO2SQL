@@ -101,6 +101,11 @@
 		<Compile Include="Sharepoint\SPOUser.cs" />
 		<Compile Include="Sharepoint\TimesheetDQ.cs" />
 		<Compile Include="Sharepoint\TwoFactorAuth.cs" />
+		<Compile Include="Security\CredentialManager.cs" />
+		<Compile Include="Security\DpapiCredentialProvider.cs" />
+		<Compile Include="Security\EnvCredentialProvider.cs" />
+		<Compile Include="Security\ICredentialProvider.cs" />
+		<Compile Include="Security\XmlCredentialProvider.cs" />
 		<Compile Include="XmlConfig\ConfigHelper.cs" />
 		<Compile Include="ConsoleLogger\Logger.cs" />
 		<Compile Include="AssemblyInfo.cs" />
