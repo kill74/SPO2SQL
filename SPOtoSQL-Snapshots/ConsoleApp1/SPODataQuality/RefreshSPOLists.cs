@@ -81,8 +81,6 @@ namespace Bring.SPODataQuality
                 {
                     Logger.Log(1, "DEBUG: SPOUser created");
 
-                    var list1 = new SPOList { SPOUser = spoUser };
-                    var list2 = new SPOList { SPOUser = spoUser };
                     Logger.Log(3, "DEBUG: SPOList objects configured");
 
                     ProcessCommandLineArguments();
@@ -274,33 +272,28 @@ namespace Bring.SPODataQuality
             Logger.Log(1, "DEBUG: Entering GetAllLists");
             try
             {
-                // Get SharePoint credentials
                 var (username, password) = ConfigurationReader.GetSharePointCredentials();
-                SPOUser spoUser = new SPOUser(username, password);
-                // Set up a context for the SharePoint site named "seed"
-                Context context = new Context()
+                using (SPOUser spoUser = new SPOUser(username, password))
                 {
-                    Site = "seed",
-                    SPOUser = spoUser
-                };
-                // Iterate through all lists in the SharePoint site
-                foreach (Microsoft.SharePoint.Client.List allList in context.GetAllLists())
-                {
-                    try
+                    Context context = new Context()
                     {
-                        Logger.Log(1, "DEBUG: Loading list - " + allList.Title);
-                        // Load the IsSystemList property to determine if the list is a system list
-                        context.Ctx.Load<IList>(allList, new Expression<Func<Microsoft.SharePoint.Client.List, object>>[1]
+                        Site = "seed",
+                        SPOUser = spoUser
+                    };
+                    foreach (Microsoft.SharePoint.Client.List allList in context.GetAllLists())
+                    {
+                        try
                         {
-                             l => (object) l.IsSystemList
-                        });
-                        context.Ctx.ExecuteQuery(); // Execute the query to retrieve the data
-                        Logger.Log(2, "List Name: " + allList.Title + "; is: " + allList.IsSystemList.ToString());
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine("ERROR: Failed to load or display list '" + allList.Title + "'.");
-                        Console.WriteLine("Exception: " + ex.Message);
+                            Logger.Log(1, "DEBUG: Loading list - " + allList.Title);
+                            context.Ctx.Load(allList, l => l.IsSystemList);
+                            context.Ctx.ExecuteQuery();
+                            Logger.Log(2, "List Name: " + allList.Title + "; is: " + allList.IsSystemList.ToString());
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("ERROR: Failed to load or display list '" + allList.Title + "'.");
+                            Console.WriteLine("Exception: " + ex.Message);
+                        }
                     }
                 }
             }
@@ -522,25 +515,25 @@ namespace Bring.SPODataQuality
                 int index1 = 0;
                 int index2 = 0;
 
-                // Match fields by title and store their internal names
                 foreach (Field field1 in fields1)
                 {
-                    Field field2;
-                    do
+                    bool found = false;
+                    while (index2 < fields2.Count)
                     {
-                        field2 = fields2[index2];
+                        Field field2 = fields2[index2];
                         if (field1.Title == field2.Title)
                         {
-                            strArray[index1, 0] = field2.InternalName; // Destination field
-                            strArray[index1, 1] = field1.InternalName; // Source field
+                            strArray[index1, 0] = field2.InternalName;
+                            strArray[index1, 1] = field1.InternalName;
+                            found = true;
                             Logger.Log(1, "DEBUG: Match found - " + field1.Title);
                         }
                         ++index2;
+                        if (found) break;
                     }
-                    while (field1.Title != field2.Title && index2 < fields2.Count);
 
                     ++index1;
-                    index2 = 0; // Reset index2 for the next field
+                    index2 = 0;
                 }
 
                 return strArray; // Return the field mappings

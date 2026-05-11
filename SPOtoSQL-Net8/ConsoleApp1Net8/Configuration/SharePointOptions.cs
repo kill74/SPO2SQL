@@ -41,7 +41,7 @@ public record SharePointOptions
     /// Maximum retry attempts for transient failures.
     /// </summary>
     [Range(0, 10, ErrorMessage = "Max retries must be between 0 and 10")]
-    public int MaxRetries { get; init} = 3;
+    public int MaxRetries { get; init; } = 3;
 
     /// <summary>
     /// Initial retry delay in milliseconds.

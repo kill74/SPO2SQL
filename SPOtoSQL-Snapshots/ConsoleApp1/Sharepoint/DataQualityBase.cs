@@ -134,18 +134,18 @@ namespace Bring.Sharepoint
         /// <param name="item">The list item.</param>
         /// <param name="fieldName">The internal field name.</param>
         /// <returns>The field value, or default if null or not found.</returns>
-        protected T GetFieldValue<T>(ListItem item, string fieldName) where T : class
+        protected T GetFieldValue<T>(ListItem item, string fieldName)
         {
             try
             {
-                if (item == null) return null;
+                if (item == null) return default;
                 if (item[fieldName] is T value) return value;
-                return null;
+                return default;
             }
             catch (Exception ex)
             {
                 Logger.LogDebug($"Failed to retrieve field '{fieldName}' from item: {ex.Message}");
-                return null;
+                return default;
             }
         }
 

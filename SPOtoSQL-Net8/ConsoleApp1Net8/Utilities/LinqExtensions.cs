@@ -1,4 +1,5 @@
-namespace Bring.Utilities;
+namespace Bring.Utilities
+{
 
 /// <summary>
 /// Demonstrates modern LINQ features introduced in .NET 6+ for SharePoint and SQL sync operations.
@@ -708,8 +709,7 @@ public static class LinqExtensions
         IEnumerable<T3> third,
         Func<T1, T2, T3, TResult> resultSelector)
     {
-        // Modern .NET 6+ supports 3+ sequences
-        return first.Zip(second, third, resultSelector);
+        return first.Zip(second, third).Select(t => resultSelector(t.First, t.Second, t.Third));
     }
 
     #endregion
@@ -801,6 +801,8 @@ public static class LinqExtensions
     }
 
     #endregion
+}
+
 }
 
 /// <summary>

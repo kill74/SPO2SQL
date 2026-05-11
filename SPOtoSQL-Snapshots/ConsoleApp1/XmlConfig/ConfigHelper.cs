@@ -30,19 +30,23 @@ namespace Bring.XmlConfig
         /// <exception cref="Exception">Thrown when the configuration file cannot be loaded.</exception>
         private static void LoadConfig()
         {
-            // Lazy loading pattern - only load once
-            if (_xmlDoc == null)
+            if (_xmlDoc != null) return;
+
+            lock (_lock)
             {
-                try
+                if (_xmlDoc == null)
                 {
-                    _xmlDoc = new XmlDocument();
-                    _xmlDoc.Load(_configPath);
-                    Logger.LogDebug($"Configuration file loaded successfully from {_configPath}");
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError($"Failed to load configuration file from {_configPath}", ex);
-                    throw new Exception($"Error loading configuration file: {ex.Message}", ex);
+                    try
+                    {
+                        _xmlDoc = new XmlDocument();
+                        _xmlDoc.Load(_configPath);
+                        Logger.LogDebug($"Configuration file loaded successfully from {_configPath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError($"Failed to load configuration file from {_configPath}", ex);
+                        throw new Exception($"Error loading configuration file: {ex.Message}", ex);
+                    }
                 }
             }
         }

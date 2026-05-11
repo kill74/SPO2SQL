@@ -21,11 +21,9 @@ namespace Bring.Sqlserver
 
             try
             {
-                // Load SharePoint credentials from configuration (secure storage recommended)
                 var (username, password) = ConfigurationReader.GetSharePointCredentials();
-                Logger.Log(1, $"SPOtoSQLUpdate: Username: {username} Password: {password}");
+                Logger.Log(1, $"SPOtoSQLUpdate: Username: {username}");
 
-                // Establish SharePoint user context
                 SPOUser user;
                 try
                 {
@@ -33,42 +31,41 @@ namespace Bring.Sqlserver
                 }
                 catch (Exception ex)
                 {
-                    // Fail fast if authentication cannot be created
                     Console.WriteLine("SPOtoSQLUpdate: ERROR - Failed to create SPOUser.");
                     Console.WriteLine("Exception: " + ex.Message);
                     Console.WriteLine("Stack Trace: " + ex.StackTrace);
                     return;
                 }
 
-                // Iterate through each SharePoint list configured in AppSettings
-                var listConfigs = ConfigurationReader.GetListConfigurations();
-                if (listConfigs != null)
+                using (user)
                 {
-                    foreach (var kvp in listConfigs)
+                    var listConfigs = ConfigurationReader.GetListConfigurations();
+                    if (listConfigs != null)
                     {
-                        var listName = kvp.Key;
-                        var config = kvp.Value;
-                        if (config.Ignore) continue; // Ignores the list if "ignore="true\""
+                        foreach (var kvp in listConfigs)
+                        {
+                            var listName = kvp.Key;
+                            var config = kvp.Value;
+                            if (config.Ignore) continue;
 
-                        string ctxURL = config.SharepointList;
-                        Logger.Log(1, $"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
-                        try
-                        {
-                            RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
-                        }
-                        catch (Exception ex)
-                        {
-                            // Log and continue on individual list errors
-                            Console.WriteLine($"SPOtoSQLUpdate: ERROR - Exception while updating list '{listName}'.");
-                            Console.WriteLine("Exception: " + ex.Message);
-                            Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                            string ctxURL = config.SharepointList;
+                            Logger.Log(1, $"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
+                            try
+                            {
+                                RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"SPOtoSQLUpdate: ERROR - Exception while updating list '{listName}'.");
+                                Console.WriteLine("Exception: " + ex.Message);
+                                Console.WriteLine("Stack Trace: " + ex.StackTrace);
+                            }
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                // Catch-all for any unexpected failure in the orchestration
                 Console.WriteLine("SPOtoSQLUpdate: FATAL ERROR - Exception during SPO to SQL update process.");
                 Console.WriteLine("Exception: " + ex.Message);
                 Console.WriteLine("Stack Trace: " + ex.StackTrace);

@@ -41,7 +41,7 @@ namespace Bring.Sharepoint
     /// <summary>
     /// Total duration of the operation.
     /// </summary>
-    public TimeSpan Duration => EndTime > StartTime ? EndTime - StartTime : TimeSpan.Zero;
+    public TimeSpan Duration => EndTime >= StartTime ? EndTime - StartTime : TimeSpan.Zero;
 
     /// <summary>
     /// Success rate as a percentage (0-100).

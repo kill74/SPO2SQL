@@ -12,7 +12,7 @@ namespace Bring.Sharepoint
     /// Unique identifier for correlating operation logs across the system.
     /// Useful for debugging and tracing related operations.
     /// </summary>
-    public string CorrelationId { get; set; } = Guid.NewGuid().ToString("N").Substring(0, 8);
+    public string CorrelationId { get; set; } = Guid.NewGuid().ToString("N");
 
     /// <summary>
     /// Operation name for identification in logs.

@@ -1,25 +1,17 @@
 using System;
 using System.Net;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.SharePoint.Client;
 using Bring.SPODataQuality;
 
 namespace Bring.Sharepoint
 {
-  /// <summary>
-  /// Provides retry logic with exponential backoff for resilient SharePoint operations.
-  /// Handles transient failures automatically.
-  /// </summary>
   public class RetryPolicy
   {
     private readonly int _maxRetries;
     private readonly int _initialDelayMs;
 
-    /// <summary>
-    /// Creates a new retry policy with default settings.
-    /// </summary>
-    /// <param name="maxRetries">Maximum number of retry attempts (default: 3).</param>
-    /// <param name="initialDelayMs">Initial delay in milliseconds before first retry (default: 1000).</param>
     public RetryPolicy(int maxRetries = 3, int initialDelayMs = 1000)
     {
       if (maxRetries < 1)
@@ -32,12 +24,6 @@ namespace Bring.Sharepoint
       _initialDelayMs = initialDelayMs;
     }
 
-    /// <summary>
-    /// Executes an operation with automatic retry on transient failures.
-    /// </summary>
-    /// <param name="operation">The operation to execute.</param>
-    /// <param name="operationName">Name of the operation for logging.</param>
-    /// <returns>The result of the operation.</returns>
     public T ExecuteWithRetry<T>(Func<T> operation, string operationName = "Unknown")
     {
       if (operation == null)
@@ -51,7 +37,7 @@ namespace Bring.Sharepoint
         {
           if (attempt > 0)
           {
-            _logger.LogWarning($"Retry attempt {attempt} of {_maxRetries} for operation '{operationName}'");
+            Logger.LogWarning($"Retry attempt {attempt} of {_maxRetries} for operation '{operationName}'");
           }
 
           return operation();
@@ -61,7 +47,7 @@ namespace Bring.Sharepoint
           attempt++;
           int delayMs = CalculateBackoffDelay(attempt);
 
-          _logger.LogWarning(
+          Logger.LogWarning(
               $"Transient error in '{operationName}': {ex.Message}. " +
               $"Retrying in {delayMs}ms (attempt {attempt}/{_maxRetries})");
 
@@ -69,13 +55,9 @@ namespace Bring.Sharepoint
         }
       }
 
-      // If we've exhausted retries, make one final attempt (will throw if it fails)
-      return operation();
+      throw new InvalidOperationException($"Operation '{operationName}' failed after {_maxRetries + 1} attempts.");
     }
 
-    /// <summary>
-    /// Executes an asynchronous operation with automatic retry on transient failures.
-    /// </summary>
     public void ExecuteWithRetry(Action operation, string operationName = "Unknown")
     {
       if (operation == null)
@@ -89,7 +71,7 @@ namespace Bring.Sharepoint
         {
           if (attempt > 0)
           {
-            _logger.LogWarning($"Retry attempt {attempt} of {_maxRetries} for operation '{operationName}'");
+            Logger.LogWarning($"Retry attempt {attempt} of {_maxRetries} for operation '{operationName}'");
           }
 
           operation();
@@ -100,7 +82,7 @@ namespace Bring.Sharepoint
           attempt++;
           int delayMs = CalculateBackoffDelay(attempt);
 
-          _logger.LogWarning(
+          Logger.LogWarning(
               $"Transient error in '{operationName}': {ex.Message}. " +
               $"Retrying in {delayMs}ms (attempt {attempt}/{_maxRetries})");
 
@@ -108,8 +90,7 @@ namespace Bring.Sharepoint
         }
       }
 
-      // If we've exhausted retries, make one final attempt (will throw if it fails)
-      operation();
+      throw new InvalidOperationException($"Operation '{operationName}' failed after {_maxRetries + 1} attempts.");
     }
 
     /// <summary>

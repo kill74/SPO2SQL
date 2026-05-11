@@ -401,7 +401,7 @@ public class Application : IHostedService
         if (value.Length <= visibleChars)
             return new string('*', value.Length);
         
-        return value[..visibleChars] + new string('*', Math.Min(6, value.Length - visibleChars));
+        return value[..visibleChars] + new string('*', value.Length - visibleChars);
     }
 
     /// <summary>

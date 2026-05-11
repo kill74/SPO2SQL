@@ -59,8 +59,8 @@ namespace Bring.Sharepoint
       if (to < from)
         throw new ArgumentException("'to' date must be greater than or equal to 'from' date.");
 
-      var fromValue = EscapeXmlValue(from.ToString("yyyy-MM-dd HH:mm:ss"));
-      var toValue = EscapeXmlValue(to.ToString("yyyy-MM-dd HH:mm:ss"));
+      var fromValue = EscapeXmlValue(from.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"));
+      var toValue = EscapeXmlValue(to.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"));
 
       return $@"<View>
     <Query>
@@ -68,11 +68,11 @@ namespace Bring.Sharepoint
             <And>
                 <Geq>
                     <FieldRef Name='{EscapeXmlValue(fieldName)}' />
-                    <Value Type='DateTime'>{fromValue}</Value>
+                    <Value Type='DateTime' IncludeTimeValue='TRUE'>{fromValue}</Value>
                 </Geq>
                 <Leq>
                     <FieldRef Name='{EscapeXmlValue(fieldName)}' />
-                    <Value Type='DateTime'>{toValue}</Value>
+                    <Value Type='DateTime' IncludeTimeValue='TRUE'>{toValue}</Value>
                 </Leq>
             </And>
         </Where>

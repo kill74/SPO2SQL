@@ -6,16 +6,10 @@ using Bring.SPODataQuality;
 
 namespace Bring.Sharepoint
 {
-  /// <summary>
-  /// Performs health checks and validation on SharePoint and SQL configurations.
-  /// </summary>
   public class HealthChecker
   {
     private readonly int _verbosity;
 
-    /// <summary>
-    /// Represents the result of a health check.
-    /// </summary>
     public class HealthCheckResult
     {
       public bool IsHealthy { get; set; } = true;
@@ -50,37 +44,27 @@ namespace Bring.Sharepoint
       _verbosity = verbosity;
     }
 
-    /// <summary>
-    /// Performs comprehensive health checks on the SharePoint and SQL configuration.
-    /// </summary>
-    public HealthCheckResult PerformHealthCheck(SPOUser spoUser, string sqlConnectionString)
+    public HealthCheckResult PerformHealthCheck(SPOUser spoUser, string sharePointUrl, string sqlConnectionString)
     {
       var result = new HealthCheckResult();
 
       if (_verbosity >= 2)
-        _logger.LogWarning("Starting health checks...");
+        Logger.Log(2, "Starting health checks...");
 
-      // Check SPOUser credentials
       ValidateSPOUserCredentials(spoUser, result);
 
-      // Check SharePoint connectivity
-      ValidateSharePointConnectivity(spoUser, result);
+      ValidateSharePointConnectivity(spoUser, sharePointUrl, result);
 
-      // Check SQL connectivity
       ValidateSqlConnectivity(sqlConnectionString, result);
 
-      // Determine overall health
       result.IsHealthy = result.Errors.Count == 0;
 
       if (_verbosity >= 1)
-        _logger.LogWarning(result.ToString());
+        Logger.Log(1, result.ToString());
 
       return result;
     }
 
-    /// <summary>
-    /// Validates SPOUser credentials are properly configured.
-    /// </summary>
     private void ValidateSPOUserCredentials(SPOUser spoUser, HealthCheckResult result)
     {
       if (spoUser == null)
@@ -90,49 +74,51 @@ namespace Bring.Sharepoint
         return;
       }
 
-      if (string.IsNullOrWhiteSpace(spoUser.UserName))
+      if (string.IsNullOrWhiteSpace(spoUser.Username))
       {
         result.Errors.Add("SharePoint username is empty or null.");
         result.IsHealthy = false;
       }
 
-      if (spoUser.Password == null || spoUser.Password.Length == 0)
+      if (spoUser.Credentials == null)
       {
-        result.Errors.Add("SharePoint password is empty or null.");
+        result.Errors.Add("SharePoint credentials are not initialized.");
         result.IsHealthy = false;
       }
     }
 
-    /// <summary>
-    /// Validates connectivity to SharePoint Online.
-    /// </summary>
-    private void ValidateSharePointConnectivity(SPOUser spoUser, HealthCheckResult result)
+    private void ValidateSharePointConnectivity(SPOUser spoUser, string sharePointUrl, HealthCheckResult result)
     {
       try
       {
-        if (spoUser == null || string.IsNullOrWhiteSpace(spoUser.SharePointURL))
+        if (spoUser == null)
+        {
+          result.Errors.Add("SPOUser is null - cannot validate connectivity.");
+          return;
+        }
+
+        if (string.IsNullOrWhiteSpace(sharePointUrl))
         {
           result.Errors.Add("SharePoint URL is not configured.");
           return;
         }
 
-        // Verify URL format
-        if (!spoUser.SharePointURL.StartsWith("https://") && !spoUser.SharePointURL.StartsWith("http://"))
+        if (!sharePointUrl.StartsWith("https://") && !sharePointUrl.StartsWith("http://"))
         {
           result.Errors.Add("SharePoint URL must start with http:// or https://");
           return;
         }
 
-        // Attempt to create client context (validates credentials and connectivity)
-        using (var clientContext = spoUser.GetClientContext())
+        using (var clientContext = new ClientContext(sharePointUrl))
         {
+          clientContext.Credentials = spoUser.Credentials;
+
           if (clientContext == null)
           {
             result.Errors.Add("Failed to create SharePoint client context.");
             return;
           }
 
-          // Quick validation: load web title
           var web = clientContext.Web;
           clientContext.Load(web, w => w.Title);
 
@@ -140,7 +126,7 @@ namespace Bring.Sharepoint
           {
             clientContext.ExecuteQuery();
             if (_verbosity >= 3)
-              _logger.LogWarning($"✓ SharePoint connectivity verified. Site: {web.Title}");
+              Logger.Log(3, $"✓ SharePoint connectivity verified. Site: {web.Title}");
           }
           catch (Exception ex)
           {
@@ -154,9 +140,6 @@ namespace Bring.Sharepoint
       }
     }
 
-    /// <summary>
-    /// Validates connectivity to SQL Server.
-    /// </summary>
     private void ValidateSqlConnectivity(string sqlConnectionString, HealthCheckResult result)
     {
       try
@@ -171,7 +154,7 @@ namespace Bring.Sharepoint
         {
           connection.Open();
           if (_verbosity >= 3)
-            _logger.LogWarning("✓ SQL Server connectivity verified.");
+            Logger.Log(3, "✓ SQL Server connectivity verified.");
           connection.Close();
         }
       }
@@ -185,10 +168,7 @@ namespace Bring.Sharepoint
       }
     }
 
-    /// <summary>
-    /// Validates that a specific SharePoint list exists and is accessible.
-    /// </summary>
-    public HealthCheckResult ValidateListAccess(SPOUser spoUser, string listName)
+    public HealthCheckResult ValidateListAccess(SPOUser spoUser, string sharePointUrl, string listName)
     {
       var result = new HealthCheckResult();
 
@@ -201,8 +181,17 @@ namespace Bring.Sharepoint
           return result;
         }
 
-        using (var clientContext = spoUser.GetClientContext())
+        if (string.IsNullOrWhiteSpace(sharePointUrl))
         {
+          result.Errors.Add("SharePoint URL cannot be empty.");
+          result.IsHealthy = false;
+          return result;
+        }
+
+        using (var clientContext = new ClientContext(sharePointUrl))
+        {
+          clientContext.Credentials = spoUser.Credentials;
+
           var list = clientContext.Web.Lists.GetByTitle(listName);
           clientContext.Load(list, l => l.Title, l => l.ItemCount);
 
@@ -210,7 +199,7 @@ namespace Bring.Sharepoint
           {
             clientContext.ExecuteQuery();
             if (_verbosity >= 3)
-              _logger.LogWarning($"✓ List '{listName}' is accessible ({list.ItemCount} items)");
+              Logger.Log(3, $"✓ List '{listName}' is accessible ({list.ItemCount} items)");
           }
           catch (Exception ex)
           {

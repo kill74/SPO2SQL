@@ -38,13 +38,10 @@ namespace Bring.SPODataQuality
         /// </summary>
         public static void LogError(string message, Exception ex = null)
         {
-            if (VerboseLevel >= 1)
+            Log(1, message);
+            if (ex != null && VerboseLevel >= 3)
             {
-                Log(1, message);
-                if (ex != null && VerboseLevel >= 3)
-                {
-                    Log(3, $"Exception Details: {ex.GetType().Name}: {ex.Message}");
-                }
+                Log(3, $"Exception Details: {ex.GetType().Name}: {ex.Message}");
             }
         }
 

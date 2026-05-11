@@ -4,22 +4,18 @@ using Bring.SPODataQuality;
 using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Data.SqlClient;
 using System.Globalization;
 using System.Text;
 
 namespace Bring.Sqlserver
 {
-    /// <summary>
-    /// Encapsulates interactions between a SharePoint list and a SQL Server database,
-    /// including schema creation, updates, and data transfer with column selection support.
-    /// </summary>
-    internal class SQLInteraction
+    internal class SQLInteraction : IDisposable
     {
         private const string DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.fff";
         private const string FUTURE_DATE = "2100-01-01 00:00:00.000";
 
-        // Core properties
         public SqlConnection Connection { get; set; }
         public SqlCommand Command { get; set; }
         public SqlTransaction Transaction { get; set; }
@@ -28,11 +24,16 @@ namespace Bring.Sqlserver
         public Dictionary<string, Field> FNDictionary { get; set; }
         public string CurrentTime { get; set; }
 
-        // Store selected and ignored columns from configuration
-        // private HashSet<string> SelectedColumns { get; set; }
         private HashSet<string> IgnoredColumns { get; set; }
         public Dictionary<string, ColumnMapping> ColumnMappings { get; set; }
-        //private Dictionary<string, ColumnMapping> _columnMappings;
+
+        public void Dispose()
+        {
+            SafeRollback();
+            Command?.Dispose();
+            Connection?.Close();
+            Connection?.Dispose();
+        }
 
         /// <summary>
         /// Initializes the SQL table for the specified SharePoint list,
@@ -130,102 +131,49 @@ namespace Bring.Sqlserver
             {
                 Logger.Log(2, "[DailyUpdate] Starting daily update for table " + this.TableName);
 
-                try
-                {
-                    this.Command.CommandText = $"DELETE FROM [{this.TableName}] WHERE Snapshot = '{FUTURE_DATE}'";
-                    this.Command.ExecuteNonQuery();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.DailyUpdate: Failed to delete snapshot marker rows - {ex.Message}");
-                }
+                this.Command.CommandText = $"DELETE FROM [{this.TableName.Replace("]", "]]")}] WHERE Snapshot = @FutureDate";
+                this.Command.Parameters.Clear();
+                this.Command.Parameters.AddWithValue("@FutureDate", FUTURE_DATE);
+                this.Command.ExecuteNonQuery();
 
-                try
-                {
-                    this.TransferData(FUTURE_DATE);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.DailyUpdate: Data transfer operation failed - {ex.Message}");
-                }
+                this.TransferData(FUTURE_DATE);
 
-                try
-                {
-                    this.UpdateMetadata();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.DailyUpdate: Metadata update failed - {ex.Message}");
-                }
+                this.UpdateMetadata();
 
-                try
-                {
-                    this.Transaction.Commit();
-                    Logger.Log(2, "[DailyUpdate] Transaction committed successfully");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.DailyUpdate: Transaction commit failed - {ex.Message}");
-                    throw;
-                }
+                this.Transaction.Commit();
+                Logger.Log(2, "[DailyUpdate] Transaction committed successfully");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.DailyUpdate: Critical failure during daily update - {ex.Message}");
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                 SafeRollback();
+                throw;
             }
         }
 
-        /// <summary>
-        /// Updates the SQL table with current SharePoint data.
-        /// </summary>
         public void CurrentTimeUpdate()
         {
             try
             {
                 Logger.Log(2, "[CurrentTimeUpdate] Starting current-time update for " + this.TableName);
 
-                try
-                {
-                    this.TransferData(this.CurrentTime);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.CurrentTimeUpdate: Data transfer operation failed - {ex.Message}");
-                }
+                this.TransferData(this.CurrentTime);
 
-                try
-                {
-                    this.UpdateMetadata();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.CurrentTimeUpdate: Metadata update failed - {ex.Message}");
-                }
+                this.UpdateMetadata();
 
-                try
-                {
-                    this.Transaction.Commit();
-                    Logger.Log(2, "[CurrentTimeUpdate] Transaction committed successfully");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.CurrentTimeUpdate: Transaction commit failed - {ex.Message}");
-                    throw;
-                }
+                this.Transaction.Commit();
+                Logger.Log(2, "[CurrentTimeUpdate] Transaction committed successfully");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.CurrentTimeUpdate: Critical failure during current-time update - {ex.Message}");
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
                 SafeRollback();
+                throw;
             }
         }
 
-        /// <summary>
-        /// Builds the dictionary of fields to be replicated, respecting column selection configuration.
-        /// </summary>
         private void BuildDictionary()
         {
             Logger.Log(1, "[BuildDictionary] Building field name dictionary...");
@@ -296,7 +244,9 @@ namespace Bring.Sqlserver
         {
             try
             {
-                this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{listName}'";
+                this.Command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @TableName";
+                this.Command.Parameters.Clear();
+                this.Command.Parameters.AddWithValue("@TableName", listName);
                 bool exists = (int)this.Command.ExecuteScalar() != 0;
                 Logger.Log(1, $"[TableExists] Table '{listName}' exists: {exists}");
                 return exists;
@@ -363,10 +313,16 @@ namespace Bring.Sqlserver
 
                     string colName = fn.Key;
 
-                    this.Command.CommandText = $"SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{this.TableName}' AND COLUMN_NAME = '{colName}'";
+                    this.Command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColName";
+                    this.Command.Parameters.Clear();
+                    this.Command.Parameters.AddWithValue("@TableName", this.TableName);
+                    this.Command.Parameters.AddWithValue("@ColName", colName);
                     if ((int)this.Command.ExecuteScalar() == 0)
                     {
-                        this.Command.CommandText = $"ALTER TABLE [{this.TableName}] ADD [{colName}] {sqlType} NULL";
+                        string safeTable = $"[{this.TableName.Replace("]", "]]")}]";
+                        string safeCol = $"[{colName.Replace("]", "]]")}]";
+                        this.Command.CommandText = $"ALTER TABLE {safeTable} ADD {safeCol} {sqlType} NULL";
+                        this.Command.Parameters.Clear();
                         this.Command.ExecuteNonQuery();
                         updatedColumns++;
                     }
@@ -384,59 +340,64 @@ namespace Bring.Sqlserver
         private void TransferData(string snapDate)
         {
             Logger.Log(1, "[TransferData] Beginning data transfer for snapshot: " + snapDate);
-            StringBuilder stringBuilder = new StringBuilder();
             string sqlColNames = this.GetSQLColNames();
             int processedItems = 0;
             int failedItems = 0;
+
+            string safeTable = $"[{this.TableName.Replace("]", "]]")}]";
+            string insertBase = $"INSERT INTO {safeTable} {sqlColNames} VALUES (@Snapshot";
+
+            var fieldList = new List<Field>(this.FNDictionary.Values);
+            for (int i = 0; i < fieldList.Count; i++)
+                insertBase += $", @F{i}";
+            insertBase += ")";
 
             foreach (ListItem listItem in this.List.ItemCollection)
             {
                 try
                 {
-                    stringBuilder.Clear();
-                    stringBuilder.AppendLine($"INSERT INTO [{this.TableName}] {sqlColNames}");
-                    stringBuilder.Append($"VALUES ('{snapDate}', ");
+                    this.Command.CommandText = insertBase;
+                    this.Command.Parameters.Clear();
+                    this.Command.Parameters.AddWithValue("@Snapshot", snapDate);
 
-                    foreach (Field field in this.FNDictionary.Values)
+                    int idx = 0;
+                    foreach (Field field in fieldList)
                     {
                         object obj = listItem[field.InternalName];
+                        string paramName = $"@F{idx}";
+
                         if (obj != null)
                         {
                             if (obj is FieldLookupValue lookup)
-                                stringBuilder.Append($"'{lookup.LookupId}', ");
+                                this.Command.Parameters.AddWithValue(paramName, lookup.LookupId);
                             else if (obj is FieldUserValue user)
-                                stringBuilder.Append($"{user.LookupId}, ");
+                                this.Command.Parameters.AddWithValue(paramName, user.LookupId);
                             else if (obj is FieldUrlValue url)
-                                stringBuilder.Append($"'{url.Url}', ");
-                            else if (obj is ContentTypeId)
-                                stringBuilder.Append($"'{obj}', ");
+                                this.Command.Parameters.AddWithValue(paramName, (object)url.Url ?? DBNull.Value);
+                            else if (obj is ContentTypeId ctId)
+                                this.Command.Parameters.AddWithValue(paramName, ctId.StringValue);
                             else if (obj is DateTime dt)
-                                stringBuilder.AppendFormat("'{0:" + DATE_FORMAT + "}', ", dt);
+                                this.Command.Parameters.AddWithValue(paramName, dt);
                             else if (obj is FieldLookupValue[] lookups)
                             {
-                                stringBuilder.Append("'");
-                                foreach (var l in lookups) stringBuilder.Append($"{l.LookupId};");
-                                stringBuilder.Append("', ");
+                                this.Command.Parameters.AddWithValue(paramName, string.Join(";", lookups.Select(l => l.LookupId)));
                             }
                             else if (obj is FieldUserValue[] users)
                             {
-                                stringBuilder.Append("'");
-                                foreach (var u in users) stringBuilder.Append($"{u.LookupId};");
-                                stringBuilder.Append("', ");
+                                this.Command.Parameters.AddWithValue(paramName, string.Join(";", users.Select(u => u.LookupId)));
                             }
                             else
                             {
-                                if (obj is string s) obj = s.Replace("'", "''");
-                                stringBuilder.Append($"'{obj}', ");
+                                this.Command.Parameters.AddWithValue(paramName, obj);
                             }
                         }
                         else
-                            stringBuilder.Append("NULL, ");
-                    }
+                        {
+                            this.Command.Parameters.AddWithValue(paramName, DBNull.Value);
+                        }
 
-                    stringBuilder.Remove(stringBuilder.Length - 2, 2);
-                    stringBuilder.Append(")");
-                    this.Command.CommandText = stringBuilder.ToString();
+                        idx++;
+                    }
 
                     try
                     {
@@ -516,9 +477,14 @@ namespace Bring.Sqlserver
             Logger.Log(1, $"[UpdateMetadata] Updating metadata for table: {this.TableName}");
             try
             {
-                this.Command.CommandText = $"DELETE FROM Metadata WHERE TableName = '{this.TableName}'";
+                this.Command.CommandText = "DELETE FROM Metadata WHERE TableName = @TableName";
+                this.Command.Parameters.Clear();
+                this.Command.Parameters.AddWithValue("@TableName", this.TableName);
                 this.Command.ExecuteNonQuery();
-                this.Command.CommandText = $"INSERT INTO Metadata (TableName, LastRefreshDate) VALUES ('{this.TableName}', '{this.CurrentTime}')";
+                this.Command.CommandText = "INSERT INTO Metadata (TableName, LastRefreshDate) VALUES (@TableName, @CurrentTime)";
+                this.Command.Parameters.Clear();
+                this.Command.Parameters.AddWithValue("@TableName", this.TableName);
+                this.Command.Parameters.AddWithValue("@CurrentTime", this.CurrentTime);
                 this.Command.ExecuteNonQuery();
                 Logger.Log(1, $"[UpdateMetadata] Metadata updated successfully");
             }
