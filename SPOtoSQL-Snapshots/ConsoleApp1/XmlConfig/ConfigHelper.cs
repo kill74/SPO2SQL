@@ -258,11 +258,41 @@ namespace Bring.XmlConfig
             }
         }
 
-        /// <summary>
-        /// Retrieves the SharePoint base URL from the configuration file.
-        /// Returns null if not configured, allowing for a default fallback URL.
-        /// </summary>
-        /// <returns>The SharePoint base URL (e.g., https://tenant.sharepoint.com), or null if not configured.</returns>
+        public static bool IsTwoFactorEnabled()
+        {
+            LoadConfig();
+
+            try
+            {
+                var secNode = _xmlDoc.SelectSingleNode("//Configuration/Security");
+                if (secNode == null) return false;
+
+                var enabledNode = secNode.SelectSingleNode("TwoFactorEnabled");
+                if (enabledNode == null) return false;
+
+                return bool.TryParse(enabledNode.InnerText.Trim(), out bool result) && result;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static string GetTwoFactorSecret()
+        {
+            LoadConfig();
+
+            try
+            {
+                var secNode = _xmlDoc.SelectSingleNode("//Configuration/Security");
+                return secNode?.SelectSingleNode("TwoFactorSecret")?.InnerText.Trim() ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
         public static string GetSharePointBaseUrl()
         {
             LoadConfig();

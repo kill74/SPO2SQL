@@ -73,6 +73,7 @@
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Sharepoint\SPOList.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Sharepoint\SPOUser.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Sharepoint\TimesheetDQ.cs" />
+    <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\Sharepoint\TwoFactorAuth.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\XmlConfig\ConfigHelper.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\ConsoleLogger\Logger.cs" />
     <Compile Include="..\..\SPOtoSQL-Snapshots\ConsoleApp1\AssemblyInfo.cs" />

@@ -77,6 +77,12 @@ namespace Bring.SPODataQuality
                     throw new InvalidOperationException("Failed to retrieve SharePoint credentials from configuration");
                 }
 
+                if (!TwoFactorAuth.PerformVerification())
+                {
+                    Console.WriteLine("2FA verification failed. Exiting.");
+                    Environment.Exit(1);
+                }
+
                 using (var spoUser = new SPOUser(credentials.Username, credentials.Password))
                 {
                     Logger.Log(1, "DEBUG: SPOUser created");

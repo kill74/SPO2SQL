@@ -24,6 +24,12 @@ namespace Bring.Sqlserver
                 var (username, password) = ConfigurationReader.GetSharePointCredentials();
                 Logger.Log(1, $"SPOtoSQLUpdate: Username: {username}");
 
+                if (!TwoFactorAuth.PerformVerification())
+                {
+                    Console.WriteLine("2FA verification failed. Exiting.");
+                    return;
+                }
+
                 SPOUser user;
                 try
                 {
