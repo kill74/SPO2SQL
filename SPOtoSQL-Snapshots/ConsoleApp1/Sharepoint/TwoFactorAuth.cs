@@ -1,6 +1,9 @@
+#nullable disable
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using Bring.XmlConfig;
 
 namespace Bring.Sharepoint
 {
@@ -9,6 +12,17 @@ namespace Bring.Sharepoint
         private const string APP_NAME = "SPO2SQL";
         private const int TIME_STEP = 30;
         private const int CODE_DIGITS = 6;
+        private const int MOD_VALUE = 1000000;
+
+        private static readonly int[] Base32Lookup = new int[128];
+
+        static TwoFactorAuth()
+        {
+            for (int i = 0; i < 128; i++) Base32Lookup[i] = -1;
+            string alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+            for (int i = 0; i < alpha.Length; i++)
+                Base32Lookup[alpha[i]] = i;
+        }
 
         public static bool IsEnabled => ConfigurationReader.IsTwoFactorEnabled();
 
@@ -19,9 +33,7 @@ namespace Bring.Sharepoint
             string secret = ConfigurationReader.GetTwoFactorSecret();
 
             if (string.IsNullOrEmpty(secret))
-            {
                 return RunSetup();
-            }
 
             return RunVerification(secret);
         }
@@ -40,7 +52,8 @@ namespace Bring.Sharepoint
             Console.WriteLine("  otpauth://totp/" + APP_NAME + "?secret=" + secret + "&issuer=" + APP_NAME);
             Console.WriteLine();
             Console.Write("Enter the 6-digit code from your authenticator app: ");
-            string? code = Console.ReadLine()?.Trim();
+            string input = Console.ReadLine();
+            string code = input?.Trim();
 
             if (!string.IsNullOrEmpty(code) && ValidateCode(secret, code))
             {
@@ -61,12 +74,11 @@ namespace Bring.Sharepoint
             for (int attempts = 0; attempts < 3; attempts++)
             {
                 Console.Write("Enter 2FA code: ");
-                string? code = Console.ReadLine()?.Trim();
+                string input = Console.ReadLine();
+                string code = input?.Trim();
 
                 if (!string.IsNullOrEmpty(code) && ValidateCode(secret, code))
-                {
                     return true;
-                }
 
                 if (attempts < 2)
                     Console.WriteLine("Invalid code. Try again.");
@@ -112,7 +124,7 @@ namespace Bring.Sharepoint
                        | ((hash[offset + 2] & 0xff) << 8)
                        | (hash[offset + 3] & 0xff);
 
-            int otp = binary % (int)Math.Pow(10, CODE_DIGITS);
+            int otp = binary % MOD_VALUE;
             return otp.ToString().PadLeft(CODE_DIGITS, '0');
         }
 
@@ -156,16 +168,19 @@ namespace Bring.Sharepoint
 
         private static byte[] Base32Decode(string input)
         {
-            const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-            input = input.Trim().ToUpperInvariant().Replace(" ", "").Replace("-", "");
+            if (input == null)
+                return Array.Empty<byte>();
+
+            input = input.Trim().ToUpperInvariant();
+            var bytes = new List<byte>();
 
             int bitBuffer = 0;
             int bitsInBuffer = 0;
-            var bytes = new System.Collections.Generic.List<byte>();
 
             foreach (char c in input)
             {
-                int value = alphabet.IndexOf(c);
+                if (c >= 128) continue;
+                int value = Base32Lookup[c];
                 if (value < 0) continue;
 
                 bitBuffer = (bitBuffer << 5) | value;
