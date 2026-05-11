@@ -24,6 +24,8 @@ namespace Bring.Sqlserver
         public Dictionary<string, Field> FNDictionary { get; set; }
         public string CurrentTime { get; set; }
 
+        public bool DailyMode { get; set; }
+
         private HashSet<string> IgnoredColumns { get; set; }
         public Dictionary<string, ColumnMapping> ColumnMappings { get; set; }
 
@@ -68,6 +70,17 @@ namespace Bring.Sqlserver
 
                 InitializeCommandAndTransaction();
                 this.CurrentTime = DateTime.Now.ToString(DATE_FORMAT);
+
+                if (this.DailyMode && this.TableExists(this.TableName))
+                {
+                    string lastSync = GetLastSyncDate();
+                    if (lastSync != null)
+                    {
+                        Logger.Log(1, "[Build] Applying incremental filter: Modified >= " + lastSync);
+                        this.List.CAMLQuery = CamlQueryBuilder.BuildDateRangeQuery("Modified",
+                            DateTime.Parse(lastSync), DateTime.Now);
+                    }
+                }
 
                 try
                 {
@@ -470,6 +483,30 @@ namespace Bring.Sqlserver
             sb.Remove(sb.Length - 2, 2);
             sb.Append(")");
             return sb.ToString();
+        }
+
+        private string GetLastSyncDate()
+        {
+            try
+            {
+                this.Command.CommandText = "SELECT LastRefreshDate FROM Metadata WHERE TableName = @TableName";
+                this.Command.Parameters.Clear();
+                this.Command.Parameters.AddWithValue("@TableName", this.TableName);
+                object result = this.Command.ExecuteScalar();
+
+                if (result == null || result == DBNull.Value)
+                    return null;
+
+                if (result is DateTime dt)
+                    return dt.ToString(DATE_FORMAT);
+
+                string str = result.ToString();
+                return string.IsNullOrEmpty(str) ? null : str;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private void UpdateMetadata()

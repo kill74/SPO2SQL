@@ -185,7 +185,8 @@ namespace Bring.Sqlserver
                 {
                     sqlInteraction = new SQLInteraction
                     {
-                        List = spoList
+                        List = spoList,
+                        DailyMode = daily
                     };
 
                     Logger.Log(1, "RefreshListsSQL: Building SQL interaction...");
