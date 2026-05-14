@@ -2,7 +2,6 @@
 using Bring.XmlConfig;
 using Bring.SPODataQuality;
 using System;
-using System.Configuration;
 
 namespace Bring.Sqlserver
 {
@@ -15,14 +14,16 @@ namespace Bring.Sqlserver
         /// Initiates the update process from SharePoint to SQL Server for all configured lists.
         /// </summary>
         /// <param name="daily">Indicates whether to perform a daily incremental update or a full current-time refresh.</param>
-        public static void SPOtoSQLUpdate(bool daily)
+        public static void SPOtoSQLUpdate(bool daily, CancellationToken cancellationToken = default)
         {
             Logger.Log(2, "SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
 
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var (username, password) = ConfigurationReader.GetSharePointCredentials();
-                Logger.Log(1, $"SPOtoSQLUpdate: Username: {username}");
+                Logger.Log(2, $"SPOtoSQLUpdate: Username retrieved successfully");
 
                 if (!TwoFactorAuth.PerformVerification())
                 {
@@ -50,6 +51,8 @@ namespace Bring.Sqlserver
                     {
                         foreach (var kvp in listConfigs)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
+
                             var listName = kvp.Key;
                             var config = kvp.Value;
                             if (config.Ignore) continue;
@@ -58,7 +61,12 @@ namespace Bring.Sqlserver
                             Logger.Log(1, $"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
                             try
                             {
-                                RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
+                                RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily, cancellationToken);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                Logger.Log(2, $"SPOtoSQLUpdate: Cancelled while processing list '{listName}'.");
+                                throw;
                             }
                             catch (Exception ex)
                             {
@@ -70,6 +78,10 @@ namespace Bring.Sqlserver
                     }
                 }
             }
+            catch (OperationCanceledException)
+            {
+                Logger.Log(2, "SPOtoSQLUpdate: Operation was cancelled.");
+            }
             catch (Exception ex)
             {
                 Console.WriteLine("SPOtoSQLUpdate: FATAL ERROR - Exception during SPO to SQL update process.");
@@ -80,67 +92,7 @@ namespace Bring.Sqlserver
             Logger.Log(2, "SPOtoSQLUpdate: SPO to SQL update completed.");
         }
 
-        /*
-        /// <summary>
-        /// Initiates the update process from SharePoint to SQL Server for all configured lists.
-        /// </summary>
-        /// <param name="daily">Indicates whether to perform a daily incremental update or a full current-time refresh.</param>
-        public static void SPOtoSQLUpdateOLD(bool daily)
-        {
-            Logger.Log(2, "SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
 
-            try
-            {
-                // Load SharePoint credentials from configuration (secure storage recommended)
-                var (username, password) = ConfigurationReader.GetSharePointCredentials();
-                Logger.Log(1, $"SPOtoSQLUpdate: Username: {username} Password: {password}");
-
-                // Establish SharePoint user context
-                SPOUser user;
-                try
-                {
-                    user = new SPOUser(username, password);
-                }
-                catch (Exception ex)
-                {
-                    // Fail fast if authentication cannot be created
-                    Console.WriteLine("SPOtoSQLUpdate: ERROR - Failed to create SPOUser.");
-                    Console.WriteLine("Exception: " + ex.Message);
-                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                    return;
-                }
-
-                // Iterate through each SharePoint list configured in AppSettings
-                foreach (string allKey in ConfigurationManager.AppSettings.AllKeys)
-                {
-                    string listName = allKey;
-                    string ctxURL = ConfigurationManager.AppSettings[allKey];
-                    Logger.Log(1, $"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
-                    try
-                    {
-                        // Delegate to RefreshListsSQL for per-list processing
-                        RefreshSQLLists.RefreshListsSQL(listName, ctxURL, user, daily);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log and continue on individual list errors
-                        Console.WriteLine($"SPOtoSQLUpdate: ERROR - Exception while updating list '{listName}'.");
-                        Console.WriteLine("Exception: " + ex.Message);
-                        Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                // Catch-all for any unexpected failure in the orchestration
-                Console.WriteLine("SPOtoSQLUpdate: FATAL ERROR - Exception during SPO to SQL update process.");
-                Console.WriteLine("Exception: " + ex.Message);
-                Console.WriteLine("Stack Trace: " + ex.StackTrace);
-            }
-
-            Logger.Log(2, "SPOtoSQLUpdate: SPO to SQL update completed.");
-        }
-        */
 
         /// <summary>
         /// Processes a specific SharePoint list: initializes context, builds SQL interaction, and performs the data transfer.
@@ -149,10 +101,11 @@ namespace Bring.Sqlserver
         /// <param name="ctxURL">The site URL or context for the SharePoint list.</param>
         /// <param name="user">Authenticated SharePoint user context.</param>
         /// <param name="daily">Flag indicating whether a daily incremental or full refresh should be executed.</param>
-        public static void RefreshListsSQL(string listName, string ctxURL, SPOUser user, bool daily)
+        public static void RefreshListsSQL(string listName, string ctxURL, SPOUser user, bool daily, CancellationToken cancellationToken = default)
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 Logger.Log(1, $"RefreshListsSQL: Initializing SPO list for: {listName}");
 
                 // Initialize SharePoint list object
@@ -186,24 +139,16 @@ namespace Bring.Sqlserver
                     sqlInteraction = new SQLInteraction
                     {
                         List = spoList,
-                        DailyMode = daily
+                        DailyMode = daily,
+                        CommandTimeoutSeconds = 300
                     };
+
+                    cancellationToken.ThrowIfCancellationRequested();
 
                     Logger.Log(1, "RefreshListsSQL: Building SQL interaction...");
                     sqlInteraction.Build();
-                }
-                catch (Exception ex)
-                {
-                    // Log and abort if building SQL commands fails
-                    Console.WriteLine($"RefreshListsSQL: ERROR - Failed to build SQLInteraction for '{listName}'.");
-                    Console.WriteLine("Exception: " + ex.Message);
-                    Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                    return;
-                }
 
-                // Perform the actual data transfer based on the mode (daily vs. full)
-                try
-                {
+                    // Perform the actual data transfer based on the mode (daily vs. full)
                     if (daily)
                     {
                         Logger.Log(2, "RefreshListsSQL: Performing daily update...");
@@ -217,11 +162,15 @@ namespace Bring.Sqlserver
                 }
                 catch (Exception ex)
                 {
-                    // Log any exceptions during the update process
-                    Console.WriteLine($"RefreshListsSQL: ERROR - Exception during update for '{listName}'.");
+                    // Log and abort if building SQL commands fails
+                    Console.WriteLine($"RefreshListsSQL: ERROR - Failed to build SQLInteraction for '{listName}'.");
                     Console.WriteLine("Exception: " + ex.Message);
                     Console.WriteLine("Stack Trace: " + ex.StackTrace);
                     return;
+                }
+                finally
+                {
+                    sqlInteraction?.Dispose();
                 }
 
                 Logger.Log(2, $"RefreshListsSQL: Update for list '{listName}' completed.");

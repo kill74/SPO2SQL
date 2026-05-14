@@ -58,6 +58,79 @@ namespace Bring.Sharepoint
       throw new InvalidOperationException($"Operation '{operationName}' failed after {_maxRetries + 1} attempts.");
     }
 
+    public T ExecuteWithRetry<T>(Func<T> operation, CancellationToken cancellationToken, string operationName = "Unknown")
+    {
+      if (operation == null)
+        throw new ArgumentNullException(nameof(operation));
+
+      int attempt = 0;
+
+      while (attempt <= _maxRetries)
+      {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+          if (attempt > 0)
+          {
+            Logger.LogWarning($"Retry attempt {attempt} of {_maxRetries} for operation '{operationName}'");
+          }
+
+          return operation();
+        }
+        catch (Exception ex) when (IsTransientError(ex) && attempt < _maxRetries)
+        {
+          attempt++;
+          int delayMs = CalculateBackoffDelay(attempt);
+
+          Logger.LogWarning(
+              $"Transient error in '{operationName}': {ex.Message}. " +
+              $"Retrying in {delayMs}ms (attempt {attempt}/{_maxRetries})");
+
+          cancellationToken.WaitHandle.WaitOne(delayMs);
+        }
+      }
+
+      throw new InvalidOperationException($"Operation '{operationName}' failed after {_maxRetries + 1} attempts.");
+    }
+
+    public void ExecuteWithRetry(Action operation, CancellationToken cancellationToken, string operationName = "Unknown")
+    {
+      if (operation == null)
+        throw new ArgumentNullException(nameof(operation));
+
+      int attempt = 0;
+
+      while (attempt <= _maxRetries)
+      {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+          if (attempt > 0)
+          {
+            Logger.LogWarning($"Retry attempt {attempt} of {_maxRetries} for operation '{operationName}'");
+          }
+
+          operation();
+          return;
+        }
+        catch (Exception ex) when (IsTransientError(ex) && attempt < _maxRetries)
+        {
+          attempt++;
+          int delayMs = CalculateBackoffDelay(attempt);
+
+          Logger.LogWarning(
+              $"Transient error in '{operationName}': {ex.Message}. " +
+              $"Retrying in {delayMs}ms (attempt {attempt}/{_maxRetries})");
+
+          cancellationToken.WaitHandle.WaitOne(delayMs);
+        }
+      }
+
+      throw new InvalidOperationException($"Operation '{operationName}' failed after {_maxRetries + 1} attempts.");
+    }
+
     public void ExecuteWithRetry(Action operation, string operationName = "Unknown")
     {
       if (operation == null)
@@ -156,7 +229,7 @@ namespace Bring.Sharepoint
       int exponentialDelay = _initialDelayMs * (int)Math.Pow(2, attempt - 1);
 
       // Add jitter (±10%) to prevent thundering herd
-      int jitter = (int)(exponentialDelay * 0.1 * (new Random().NextDouble() - 0.5) * 2);
+      int jitter = (int)(exponentialDelay * 0.1 * (Random.Shared.NextDouble() - 0.5) * 2);
 
       return Math.Max(100, exponentialDelay + jitter); // Minimum 100ms
     }

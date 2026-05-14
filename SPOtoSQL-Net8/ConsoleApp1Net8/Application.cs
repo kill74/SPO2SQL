@@ -96,6 +96,12 @@ public class Application : IHostedService
         return Task.CompletedTask;
     }
 
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("{AppName} stopping gracefully...", _appOptions.Name);
+        return Task.CompletedTask;
+    }
+
     /// <summary>
     /// Logs a comprehensive configuration summary on startup.
     /// Demonstrates accessing configuration values safely without exposing sensitive data.
@@ -162,54 +168,34 @@ public class Application : IHostedService
     {
         try
         {
-            // Clean access to configuration values - no parsing, no validation needed here
-            // Everything is strongly-typed and already validated
-            
             _logger.LogInformation("Starting SharePoint to SQL synchronization...");
-            
-            // Example: Accessing nested configuration values in a clean way
-            var retryConfig = new
-            {
-                MaxAttempts = _sharePointOptions.MaxRetries,
-                InitialDelay = TimeSpan.FromMilliseconds(_sharePointOptions.InitialRetryDelayMs),
-                Timeout = TimeSpan.FromSeconds(_sharePointOptions.TimeoutSeconds)
-            };
-            
-            _logger.LogDebug("Retry configuration: Max attempts={MaxAttempts}, Initial delay={InitialDelay}, Timeout={Timeout}",
-                retryConfig.MaxAttempts,
-                retryConfig.InitialDelay,
-                retryConfig.Timeout);
 
-            // Example: Using configuration values for business logic
+            // Bridge modern IOptions config to legacy ConfigurationReader
+            ConfigureLegacyBridge();
+
+            // Run health checks if enabled
             if (_appOptions.EnableHealthChecks)
             {
                 await PerformHealthChecksAsync(cancellationToken);
             }
 
-            if (_appOptions.EnableMetrics)
+            _logger.LogInformation("Sync configuration: DailyMode={DailyMode}, BatchSize={BatchSize}",
+                _appOptions.Environment == "Production", _sqlOptions.BatchSize);
+
+            // Run the sync on a background thread with cancellation support
+            await Task.Run(() =>
             {
-                _logger.LogInformation("Metrics collection is enabled");
-                // Initialize metrics collection here
-            }
+                RefreshSQLLists.SPOtoSQLUpdate(
+                    daily: _appOptions.Environment == "Production",
+                    cancellationToken: cancellationToken);
+            }, cancellationToken);
 
-            // TODO: Implement the actual sync logic
-            // This will be populated as we modernize the core services
-            // Example services would receive IOptions<T> via constructor injection:
-            //
-            // public class SharePointService(IOptions<SharePointOptions> options)
-            // {
-            //     private readonly SharePointOptions _options = options.Value;
-            //     
-            //     public async Task ConnectAsync()
-            //     {
-            //         // Use _options.SiteUrl, _options.Username, etc.
-            //     }
-            // }
-
-            // Demonstrate record-based DTOs
-            DemonstrateRecordModels();
-
-            _logger.LogInformation("Application completed successfully");
+            _logger.LogInformation("SharePoint to SQL synchronization completed successfully");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("SharePoint to SQL synchronization was cancelled.");
+            Environment.ExitCode = 1;
         }
         catch (Exception ex)
         {
@@ -220,6 +206,31 @@ public class Application : IHostedService
         {
             // Stop the application
             _lifetime.StopApplication();
+        }
+    }
+
+    /// <summary>
+    /// Bridges the modern IOptions configuration to the legacy ConfigurationReader
+    /// so that legacy sync code can read config from the XML file.
+    /// </summary>
+    private void ConfigureLegacyBridge()
+    {
+        // Set the config path for the legacy ConfigurationReader
+        // Use configured path, fall back to default relative to base directory
+        string configPath = _appOptions.LegacyConfigPath;
+        if (!Path.IsPathRooted(configPath))
+        {
+            configPath = Path.Combine(AppContext.BaseDirectory, configPath);
+        }
+
+        if (File.Exists(configPath))
+        {
+            XmlConfig.ConfigurationReader.SetConfigPath(configPath);
+            _logger.LogInformation("Legacy config path set to: {ConfigPath}", configPath);
+        }
+        else
+        {
+            _logger.LogWarning("Legacy UserConfig.xml not found at: {ConfigPath}", configPath);
         }
     }
 
@@ -253,12 +264,6 @@ public class Application : IHostedService
         }
         
         _logger.LogInformation("Health checks completed");
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("{AppName} stopping gracefully...", _appOptions.Name);
-        return Task.CompletedTask;
     }
 
     /// <summary>

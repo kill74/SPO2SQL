@@ -48,11 +48,9 @@ namespace Bring.Sharepoint
                 string url = $"{baseUrl.TrimEnd('/')}/{Site.TrimStart('/')}";
                 Logger.LogDebug($"Building SharePoint context for: {url}");
 
-                // Create a new ClientContext and assign credentials
-                var clientContext = new ClientContext(url)
-                {
-                    Credentials = SPOUser.Credentials
-                };
+                // Create a new ClientContext and apply OAuth token authentication
+                var clientContext = new ClientContext(url);
+                SPOUser.ApplyAuthentication(clientContext, url);
 
                 // Store references for later use
                 Ctx = clientContext;
@@ -84,7 +82,7 @@ namespace Bring.Sharepoint
                     ?? "https://bringglobal.sharepoint.com";
                 string expectedUrl = $"{baseUrl.TrimEnd('/')}/{Site.TrimStart('/')}";
                 
-                if (web == null || Ctx?.Site?.Url != expectedUrl)
+                if (web == null || Ctx?.Url != expectedUrl)
                 {
                     Logger.LogDebug("Rebuilding context for GetAllLists");
                     BuildContext();

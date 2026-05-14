@@ -111,7 +111,8 @@ namespace Bring.Sharepoint
 
         using (var clientContext = new ClientContext(sharePointUrl))
         {
-          clientContext.Credentials = spoUser.Credentials;
+          if (spoUser != null)
+            spoUser.ApplyAuthentication(clientContext, sharePointUrl);
 
           if (clientContext == null)
           {
@@ -190,7 +191,8 @@ namespace Bring.Sharepoint
 
         using (var clientContext = new ClientContext(sharePointUrl))
         {
-          clientContext.Credentials = spoUser.Credentials;
+          if (spoUser != null)
+            spoUser.ApplyAuthentication(clientContext, sharePointUrl);
 
           var list = clientContext.Web.Lists.GetByTitle(listName);
           clientContext.Load(list, l => l.Title, l => l.ItemCount);

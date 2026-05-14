@@ -8,10 +8,13 @@
     <Nullable>enable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UserSecretsId>spo2sql-modernization-secrets</UserSecretsId>
+    <StartupObject>Bring.Program</StartupObject>
+    <NoWarn>CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625;CS8605;CA1416;NU1603;CS0618</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- SharePoint & SQL -->
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.84.0" />
     <PackageReference Include="Microsoft.SharePointOnline.CSOM" Version="16.1.24816.12000" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     

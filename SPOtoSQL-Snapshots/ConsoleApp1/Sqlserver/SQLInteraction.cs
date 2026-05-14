@@ -25,6 +25,7 @@ namespace Bring.Sqlserver
         public string CurrentTime { get; set; }
 
         public bool DailyMode { get; set; }
+        public int CommandTimeoutSeconds { get; set; } = 300;
 
         private HashSet<string> IgnoredColumns { get; set; }
         public Dictionary<string, ColumnMapping> ColumnMappings { get; set; }
@@ -593,6 +594,7 @@ namespace Bring.Sqlserver
         private void InitializeCommandAndTransaction()
         {
             this.Command = this.Connection.CreateCommand();
+            this.Command.CommandTimeout = this.CommandTimeoutSeconds;
             this.Transaction = this.Connection.BeginTransaction($"{this.TableName} TXN");
             this.Command.Connection = this.Connection;
             this.Command.Transaction = this.Transaction;

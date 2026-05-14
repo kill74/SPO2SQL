@@ -1,6 +1,7 @@
 ﻿using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Bring.SPODataQuality;
 
 namespace Bring.Sharepoint
@@ -126,26 +127,26 @@ namespace Bring.Sharepoint
                 return "<View><Query></Query></View>";
 
             // Build nested <Or> clauses for all unit keys
-            string xml = "<View><Query><Where>";
-            
+            var xml = new StringBuilder("<View><Query><Where>");
+
             // Add opening <Or> tags for all conditions except the first
             for (int i = 1; i < unitMap.Count; i++)
             {
-                xml += "<Or>";
+                xml.Append("<Or>");
             }
 
             bool first = true;
             foreach (var key in unitMap.Keys)
             {
-                xml += $"<Eq><FieldRef Name='{UNIT_LOOKUP_FIELD}' />" +
-                       $"<Value Type='Text'>{EscapeXmlValue(key)}</Value></Eq>";
-                
-                if (!first) xml += "</Or>";
+                xml.Append($"<Eq><FieldRef Name='{UNIT_LOOKUP_FIELD}' />" +
+                           $"<Value Type='Text'>{EscapeXmlValue(key)}</Value></Eq>");
+
+                if (!first) xml.Append("</Or>");
                 first = false;
             }
 
-            xml += "</Where></Query></View>";
-            return xml;
+            xml.Append("</Where></Query></View>");
+            return xml.ToString();
         }
 
         /// <summary>

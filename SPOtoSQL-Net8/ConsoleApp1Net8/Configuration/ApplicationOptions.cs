@@ -39,4 +39,9 @@ public record ApplicationOptions
     /// Environment name (Development, Staging, Production).
     /// </summary>
     public string Environment { get; init; } = "Production";
+
+    /// <summary>
+    /// Path to the legacy UserConfig.xml file.
+    /// </summary>
+    public string LegacyConfigPath { get; init; } = "XmlConfig\\UserConfig.xml";
 }
