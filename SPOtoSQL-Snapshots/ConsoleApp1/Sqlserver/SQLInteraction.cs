@@ -289,8 +289,12 @@ namespace Bring.Sqlserver
                 else
                     sqlType = this.SQLFieldType(fn.Value);
 
+                // Prevent SQL injection in DataType
                 if (sqlType != null)
+                {
+                    sqlType = sqlType.Replace(";", "").Replace("'", "").Replace("--", "");
                     stringBuilder.AppendLine($"[{fn.Key}] {sqlType} NULL,");
+                }
             }
 
             stringBuilder.Remove(stringBuilder.Length - 3, 3);
@@ -324,6 +328,10 @@ namespace Bring.Sqlserver
                         sqlType = mapping.DataType;
                     else
                         sqlType = this.SQLFieldType(fn.Value);
+
+                    // Prevent SQL injection in DataType
+                    if (sqlType != null)
+                        sqlType = sqlType.Replace(";", "").Replace("'", "").Replace("--", "");
 
                     string colName = fn.Key;
 
