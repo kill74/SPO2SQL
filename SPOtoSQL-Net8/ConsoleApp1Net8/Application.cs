@@ -44,9 +44,8 @@ public class Application : IHostedService
 {
     private readonly ILogger<Application> _logger;
     private readonly IHostApplicationLifetime _lifetime;
-    
-    // Pattern 1: IOptions<T> - Singleton pattern, value cached at injection time
-    // Best for: Configuration that doesn't change during app lifetime
+    private static readonly HttpClient _httpClient = new();
+
     private readonly ApplicationOptions _appOptions;
     private readonly SharePointOptions _sharePointOptions;
     private readonly SqlOptions _sqlOptions;
@@ -244,12 +243,9 @@ public class Application : IHostedService
         // Example: Verify SharePoint URL is accessible
         try
         {
-            using var httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(_sharePointOptions.TimeoutSeconds)
-            };
-            
-            var response = await httpClient.GetAsync(_sharePointOptions.SiteUrl, cancellationToken);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(_sharePointOptions.TimeoutSeconds));
+            var response = await _httpClient.GetAsync(_sharePointOptions.SiteUrl, cts.Token);
             _logger.LogInformation("SharePoint URL health check: {StatusCode}", response.StatusCode);
         }
         catch (Exception ex)

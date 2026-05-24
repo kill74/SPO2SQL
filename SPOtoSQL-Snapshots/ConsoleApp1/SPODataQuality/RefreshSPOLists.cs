@@ -447,12 +447,12 @@ namespace Bring.SPODataQuality
                 int num1 = 0; // Last ID in source list
                 int num2 = 0; // Last ID in destination list
 
-                string[,] actualFields;
+                List<(string Source, string Dest)> actualFields;
                 try
                 {
                     // Get the field mappings between the source and destination lists
                     actualFields = GetActualFields(sourceList, destList);
-                    Logger.Log(1, "DEBUG: Fields obtained");
+                    Logger.Log(1, "DEBUG: Fields obtained - " + actualFields.Count + " mappings");
                 }
                 catch (Exception ex)
                 {
@@ -461,13 +461,19 @@ namespace Bring.SPODataQuality
                     return;
                 }
 
+                if (actualFields.Count == 0)
+                {
+                    Logger.Log(2, "No matching fields found between source and destination lists. Skipping sync.");
+                    return;
+                }
+
                 try
                 {
                     // Determine the last ID in the source list
-                    if ((uint)sourceList.ItemCollection.Count > 0U)
+                    if (sourceList.ItemCollection is { Count: > 0 })
                         num1 = (int)sourceList.ItemCollection[sourceList.ItemCollection.Count - 1]["ID"];
                     // Determine the last ID in the destination list
-                    if ((uint)destList.ItemCollection.Count > 0U)
+                    if (destList.ItemCollection is { Count: > 0 })
                         num2 = (int)destList.ItemCollection[destList.ItemCollection.Count - 1]["ID"];
                 }
                 catch (Exception ex)
@@ -507,15 +513,15 @@ namespace Bring.SPODataQuality
                     {
                         int id = (int)sourceList.ItemCollection[index1]["ID"];
                         // Copy field values from source to destination based on the field mappings
-                        for (int index2 = 0; index2 < actualFields.Length / 2; ++index2)
+                        foreach (var (destField, sourceField) in actualFields)
                         {
                             try
                             {
-                                destList.ItemCollection.GetById(id)[actualFields[index2, 0]] = sourceList.ItemCollection[index1][actualFields[index2, 1]];
+                                destList.ItemCollection.GetById(id)[destField] = sourceList.ItemCollection[index1][sourceField];
                             }
                             catch (Exception ex)
                             {
-                                Console.WriteLine("ERROR: Failed to copy field '" + actualFields[index2, 1] + "' to '" + actualFields[index2, 0] + "' for item ID " + id + ".");
+                                Console.WriteLine("ERROR: Failed to copy field '" + sourceField + "' to '" + destField + "' for item ID " + id + ".");
                                 Console.WriteLine("Exception: " + ex.Message);
                             }
                         }
@@ -557,7 +563,7 @@ namespace Bring.SPODataQuality
         }
 
         // Helper method to create a mapping of fields between two lists based on their titles
-        private static string[,] GetActualFields(SPOList listone, SPOList listtwo)
+        private static List<(string Source, string Dest)> GetActualFields(SPOList listone, SPOList listtwo)
         {
             Logger.Log(1, "DEBUG: Entering GetActualFields");
             try
@@ -566,33 +572,30 @@ namespace Bring.SPODataQuality
                 List<Field> fields1 = GetFields(listone);
                 List<Field> fields2 = GetFields(listtwo);
 
-                // Create a 2D array to store the field mappings (internal names)
-                string[,] strArray = new string[fields1.Count, 2];
-                int index1 = 0;
-                int index2 = 0;
+                // Build a dictionary from fields2 for O(1) lookups by title
+                var fields2ByTitle = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
+                foreach (var f in fields2)
+                    if (!string.IsNullOrEmpty(f.Title))
+                        fields2ByTitle[f.Title] = f;
 
+                // Match fields from listone to listtwo by title
+                var mappings = new List<(string Source, string Dest)>(fields1.Count);
                 foreach (Field field1 in fields1)
                 {
-                    bool found = false;
-                    while (index2 < fields2.Count)
-                    {
-                        Field field2 = fields2[index2];
-                        if (field1.Title == field2.Title)
-                        {
-                            strArray[index1, 0] = field2.InternalName;
-                            strArray[index1, 1] = field1.InternalName;
-                            found = true;
-                            Logger.Log(1, "DEBUG: Match found - " + field1.Title);
-                        }
-                        ++index2;
-                        if (found) break;
-                    }
+                    if (string.IsNullOrEmpty(field1.Title)) continue;
 
-                    ++index1;
-                    index2 = 0;
+                    if (fields2ByTitle.TryGetValue(field1.Title, out var field2))
+                    {
+                        mappings.Add((field2.InternalName, field1.InternalName));
+                        Logger.Log(1, "DEBUG: Match found - " + field1.Title);
+                    }
+                    else
+                    {
+                        Logger.Log(1, "DEBUG: No match for field - " + field1.Title + " (skipping)");
+                    }
                 }
 
-                return strArray; // Return the field mappings
+                return mappings;
             }
             catch (Exception ex)
             {
@@ -606,7 +609,7 @@ namespace Bring.SPODataQuality
         private static List<Field> GetFields(SPOList list)
         {
             Logger.Log(1, "DEBUG: Entering GetFields");
-            List<Field> fieldList = new List<Field>();
+            var fieldList = new List<Field>();
             try
             {
                 // Iterate through all fields in the list
@@ -627,7 +630,7 @@ namespace Bring.SPODataQuality
                 throw;
             }
 
-            return fieldList; // Return the list of fields
+            return fieldList;
         }
     }
 }

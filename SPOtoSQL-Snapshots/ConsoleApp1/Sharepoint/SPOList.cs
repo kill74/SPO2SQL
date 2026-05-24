@@ -21,7 +21,8 @@ namespace Bring.Sharepoint
         public string Name { get; set; }
 
         /// <summary>
-        /// Collection of items from the SharePoint list
+        /// Collection of items from the SharePoint list (last page if paginated).
+        /// Use <see cref="AllItems"/> for all items across all pages when pagination is enabled.
         /// </summary>
         public ListItemCollection ItemCollection { get; set; }
 
@@ -36,9 +37,14 @@ namespace Bring.Sharepoint
         public string CAMLQuery { get; set; }
 
         /// <summary>
-        /// Build the list by loading from SharePoint
+        /// All items accumulated across pagination pages, or null if not paginated.
         /// </summary>
-        public void Build()
+        public List<ListItem> AllItems { get; private set; }
+
+        /// <summary>
+        /// Build the list by loading from SharePoint.
+        /// </summary>
+        public void Build(int? pageSize = null)
         {
             try
             {
@@ -54,31 +60,77 @@ namespace Bring.Sharepoint
                     BuildContext();
                 }
 
-                // Create CAML query
-                CamlQuery camlQuery = string.IsNullOrEmpty(CAMLQuery)
-                    ? CamlQuery.CreateAllItemsQuery()
-                    : new CamlQuery { ViewXml = CAMLQuery };
-
-                // Load list items
                 _list = web.Lists.GetByTitle(Name);
-                ItemCollection = _list.GetItems(camlQuery);
                 Fields = _list.Fields;
-
-                // Prepare context for execution
                 Ctx.Load(_list);
-                Ctx.Load(ItemCollection);
                 Ctx.Load(Fields);
 
-                Logger.Log(2, "Executing query to retrieve list items");
-                Ctx.ExecuteQuery();
+                if (pageSize.HasValue && pageSize.Value > 0)
+                {
+                    BuildWithPagination(pageSize.Value);
+                }
+                else
+                {
+                    BuildSinglePage();
+                }
 
-                Logger.LogDebug($"Successfully loaded {ItemCollection.Count} items from list '{Name}'");
+                Logger.LogDebug($"Successfully loaded {ItemCollection?.Count ?? 0} items from list '{Name}'");
             }
             catch (Exception ex)
             {
                 Logger.LogError($"Failed to build list '{Name}'", ex);
                 throw;
             }
+        }
+
+        private void BuildSinglePage()
+        {
+            CamlQuery camlQuery = string.IsNullOrEmpty(CAMLQuery)
+                ? CamlQuery.CreateAllItemsQuery()
+                : new CamlQuery { ViewXml = CAMLQuery };
+
+            ItemCollection = _list.GetItems(camlQuery);
+            Ctx.Load(ItemCollection);
+            Ctx.ExecuteQuery();
+        }
+
+        private void BuildWithPagination(int pageSize)
+        {
+            AllItems = new List<ListItem>();
+            int pageNum = 0;
+            CamlQuery camlQuery;
+
+            do
+            {
+                string baseXml = string.IsNullOrEmpty(CAMLQuery)
+                    ? "<View><Query></Query></View>"
+                    : CAMLQuery;
+
+                // Inject RowLimit at View level
+                if (!baseXml.Contains("<RowLimit>"))
+                {
+                    baseXml = baseXml.TrimEnd();
+                    if (baseXml.EndsWith("</View>"))
+                        baseXml = baseXml.Substring(0, baseXml.Length - 7) + $"<RowLimit>{pageSize}</RowLimit></View>";
+                }
+
+                camlQuery = new CamlQuery { ViewXml = baseXml };
+
+                if (pageNum > 0 && ItemCollection?.ListItemCollectionPosition != null)
+                {
+                    camlQuery.ListItemCollectionPosition = ItemCollection.ListItemCollectionPosition;
+                }
+
+                ItemCollection = _list.GetItems(camlQuery);
+                Ctx.Load(ItemCollection);
+                Ctx.ExecuteQuery();
+
+                foreach (ListItem item in ItemCollection)
+                    AllItems.Add(item);
+
+                pageNum++;
+            }
+            while (ItemCollection?.ListItemCollectionPosition != null);
         }
 
         /// <summary>
@@ -89,7 +141,6 @@ namespace Bring.Sharepoint
             try
             {
                 Logger.Log(2, $"Updating list '{Name}'");
-                Ctx.ExecuteQuery();
                 Build();
             }
             catch (Exception ex)
@@ -142,8 +193,7 @@ namespace Bring.Sharepoint
                     return;
                 }
 
-                StringBuilder sb = new StringBuilder();
-                sb.AppendLine("Field|InternalName|Value|CanBeDeleted|Hidden|FieldType|ReadOnly|FromBaseType|Required|ItemValueType");
+                Logger.Log(1, "Field|InternalName|Value|CanBeDeleted|Hidden|FieldType|ReadOnly|FromBaseType|Required|ItemValueType");
 
                 foreach (Field field in (IEnumerable<Field>)Fields)
                 {
@@ -151,16 +201,14 @@ namespace Bring.Sharepoint
                     {
                         object fieldValue = item[field.InternalName];
                         string formattedValue = FormatFieldOutput(field, fieldValue);
-                        sb.AppendLine($"{field.Title}|{field.InternalName}|{formattedValue}|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|{fieldValue?.GetType().Name ?? "NULL"}");
+                        Logger.Log(1, $"{field.Title}|{field.InternalName}|{formattedValue}|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|{fieldValue?.GetType().Name ?? "NULL"}");
                     }
                     catch (Exception ex)
                     {
                         Logger.LogWarning($"Could not retrieve value for field '{field.Title}': {ex.Message}");
-                        sb.AppendLine($"{field.Title}|{field.InternalName}|ERROR|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|ERROR");
+                        Logger.Log(1, $"{field.Title}|{field.InternalName}|ERROR|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|ERROR");
                     }
                 }
-
-                Logger.Log(1, sb.ToString());
             }
             catch (Exception ex)
             {

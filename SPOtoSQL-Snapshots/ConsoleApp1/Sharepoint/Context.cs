@@ -48,6 +48,9 @@ namespace Bring.Sharepoint
                 string url = $"{baseUrl.TrimEnd('/')}/{Site.TrimStart('/')}";
                 Logger.LogDebug($"Building SharePoint context for: {url}");
 
+                // Dispose previous context to release resources and unsub event handlers
+                Ctx?.Dispose();
+
                 // Create a new ClientContext and apply OAuth token authentication
                 var clientContext = new ClientContext(url);
                 SPOUser.ApplyAuthentication(clientContext, url);
