@@ -79,12 +79,6 @@ namespace Bring.Sharepoint
         result.Errors.Add("SharePoint username is empty or null.");
         result.IsHealthy = false;
       }
-
-      if (spoUser.Credentials == null)
-      {
-        result.Errors.Add("SharePoint credentials are not initialized.");
-        result.IsHealthy = false;
-      }
     }
 
     private void ValidateSharePointConnectivity(SPOUser spoUser, string sharePointUrl, HealthCheckResult result)
@@ -111,14 +105,7 @@ namespace Bring.Sharepoint
 
         using (var clientContext = new ClientContext(sharePointUrl))
         {
-          if (spoUser != null)
-            spoUser.ApplyAuthentication(clientContext, sharePointUrl);
-
-          if (clientContext == null)
-          {
-            result.Errors.Add("Failed to create SharePoint client context.");
-            return;
-          }
+          spoUser.ApplyAuthentication(clientContext, sharePointUrl);
 
           var web = clientContext.Web;
           clientContext.Load(web, w => w.Title);

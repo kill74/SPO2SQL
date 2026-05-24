@@ -1,7 +1,7 @@
 ﻿using Microsoft.SharePoint.Client;
 using System;
-using System.Net;
-using System.Security;
+using System.Collections.Concurrent;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Identity.Client;
 
@@ -14,11 +14,10 @@ namespace Bring.Sharepoint
         public string Username { get; private set; }
 
         private readonly string _plainPassword;
-        private SecureString _securePassword;
         private AuthenticationResult _tokenResult;
         private string _lastSiteUrl;
-
-        internal ICredentials Credentials { get; private set; }
+        private IPublicClientApplication _app;
+        private readonly ConcurrentDictionary<string, IDisposable> _eventHandlers = new();
 
         public SPOUser(string username, string password)
         {
@@ -31,27 +30,23 @@ namespace Bring.Sharepoint
 
             Username = username;
             _plainPassword = password;
-
-            _securePassword = new SecureString();
-            foreach (char c in password)
-                _securePassword.AppendChar(c);
-            _securePassword.MakeReadOnly();
         }
 
         /// <summary>
         /// Acquires or returns a cached OAuth access token for the given SharePoint site URL.
-        /// Uses MSAL with username/password flow against Azure AD.
+        /// Uses MSAL with token cache (silent first, then username/password fallback).
         /// </summary>
         public async Task<string> GetAccessTokenAsync(string siteUrl)
         {
-            if (!string.IsNullOrEmpty(_tokenResult?.AccessToken) && _lastSiteUrl == siteUrl && _tokenResult.ExpiresOn > DateTimeOffset.UtcNow.AddMinutes(5))
+            if (!string.IsNullOrEmpty(_tokenResult?.AccessToken) &&
+                _lastSiteUrl == siteUrl &&
+                _tokenResult.ExpiresOn > DateTimeOffset.UtcNow.AddMinutes(5))
             {
                 return _tokenResult.AccessToken;
             }
 
-            var authority = "https://login.microsoftonline.com/organizations";
-            var app = PublicClientApplicationBuilder.Create(WellKnownClientId)
-                .WithAuthority(authority)
+            _app ??= PublicClientApplicationBuilder.Create(WellKnownClientId)
+                .WithAuthority("https://login.microsoftonline.com/organizations")
                 .Build();
 
             var uri = new Uri(siteUrl);
@@ -59,14 +54,30 @@ namespace Bring.Sharepoint
 
             try
             {
-                var accounts = await app.GetAccountsAsync();
-                _tokenResult = await app.AcquireTokenByUsernamePassword(
+                var accounts = await _app.GetAccountsAsync();
+
+                if (accounts.Any())
+                {
+                    try
+                    {
+                        _tokenResult = await _app.AcquireTokenSilent(new[] { scope }, accounts.First())
+                            .ExecuteAsync();
+                        _lastSiteUrl = siteUrl;
+                        Logger.LogDebug("OAuth token acquired silently for " + siteUrl);
+                        return _tokenResult.AccessToken;
+                    }
+                    catch (MsalUiRequiredException)
+                    {
+                    }
+                }
+
+                _tokenResult = await _app.AcquireTokenByUsernamePassword(
                     new[] { scope },
                     Username,
                     _plainPassword)
                     .ExecuteAsync();
                 _lastSiteUrl = siteUrl;
-                Logger.LogDebug("OAuth token acquired successfully for " + siteUrl);
+                Logger.LogDebug("OAuth token acquired via username/password for " + siteUrl);
                 return _tokenResult.AccessToken;
             }
             catch (MsalUiRequiredException ex)
@@ -85,10 +96,17 @@ namespace Bring.Sharepoint
 
         /// <summary>
         /// Applies the OAuth bearer token to a ClientContext via the ExecutingWebRequest event.
+        /// Unsubscribes previous handler for the same site URL to prevent leaks.
         /// </summary>
         public void ApplyAuthentication(ClientContext ctx, string siteUrl)
         {
-            ctx.ExecutingWebRequest += async (sender, e) =>
+            if (_eventHandlers.TryGetValue(siteUrl, out var oldHandler))
+            {
+                oldHandler.Dispose();
+                _eventHandlers.TryRemove(siteUrl, out _);
+            }
+
+            var handler = new EventHandler<WebRequestEventArgs>(async (sender, e) =>
             {
                 try
                 {
@@ -100,15 +118,37 @@ namespace Bring.Sharepoint
                     Logger.LogError("Failed to apply authentication token", ex);
                     throw;
                 }
-            };
+            });
+
+            ctx.ExecutingWebRequest += handler;
+            _eventHandlers[siteUrl] = new HandlerDisposable(ctx, handler);
         }
 
         /// <summary>
-        /// Disposes of the SecureString password, clearing it from memory.
+        /// Clears references to sensitive data when the object is disposed.
         /// </summary>
         public void Dispose()
         {
-            _securePassword?.Dispose();
+            foreach (var kvp in _eventHandlers)
+                kvp.Value.Dispose();
+            _eventHandlers.Clear();
+        }
+
+        private sealed class HandlerDisposable : IDisposable
+        {
+            private readonly ClientContext _ctx;
+            private readonly EventHandler<WebRequestEventArgs> _handler;
+
+            public HandlerDisposable(ClientContext ctx, EventHandler<WebRequestEventArgs> handler)
+            {
+                _ctx = ctx;
+                _handler = handler;
+            }
+
+            public void Dispose()
+            {
+                _ctx.ExecutingWebRequest -= _handler;
+            }
         }
     }
 }

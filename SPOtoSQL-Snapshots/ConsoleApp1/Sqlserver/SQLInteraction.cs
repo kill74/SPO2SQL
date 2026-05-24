@@ -4,10 +4,11 @@ using Bring.SPODataQuality;
 using Microsoft.SharePoint.Client;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Microsoft.Data.SqlClient;
+using System.Data;
 using System.Globalization;
+using System.Linq;
 using System.Text;
+using Microsoft.Data.SqlClient;
 
 namespace Bring.Sqlserver
 {
@@ -30,12 +31,15 @@ namespace Bring.Sqlserver
         private HashSet<string> IgnoredColumns { get; set; }
         public Dictionary<string, ColumnMapping> ColumnMappings { get; set; }
 
+        private bool? _tableExistsCache;
+
         public void Dispose()
         {
             SafeRollback();
             Command?.Dispose();
             Connection?.Close();
             Connection?.Dispose();
+            _tableExistsCache = null;
         }
 
         /// <summary>
@@ -48,8 +52,6 @@ namespace Bring.Sqlserver
 
             try
             {
-                // Load selected and ignored columns from configuration
-                // this.SelectedColumns = ConfigurationReader.GetSelectedColumns();
                 this.IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
 
                 Logger.Log(1, "[Build] Ignored columns from config: " + (this.IgnoredColumns == null ? "None" : string.Join(", ", this.IgnoredColumns)));
@@ -72,7 +74,9 @@ namespace Bring.Sqlserver
                 InitializeCommandAndTransaction();
                 this.CurrentTime = DateTime.Now.ToString(DATE_FORMAT);
 
-                if (this.DailyMode && this.TableExists(this.TableName))
+                bool tableAlreadyExists = this.TableExists(this.TableName);
+
+                if (this.DailyMode && tableAlreadyExists)
                 {
                     string lastSync = GetLastSyncDate();
                     if (lastSync != null)
@@ -86,7 +90,7 @@ namespace Bring.Sqlserver
                 try
                 {
                     Logger.Log(1, "[Build] Initializing SharePoint list structure...");
-                    this.List.Build();
+                    this.List.Build(pageSize: 100);
                 }
                 catch (Exception ex)
                 {
@@ -110,7 +114,7 @@ namespace Bring.Sqlserver
 
                 try
                 {
-                    if (!this.TableExists(this.TableName))
+                    if (!tableAlreadyExists)
                     {
                         Logger.Log(1, "[Build] Creating new table: " + this.TableName);
                         this.CreateTable();
@@ -125,6 +129,7 @@ namespace Bring.Sqlserver
                 {
                     Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: Table structure operation failed - {ex.Message}");
                     Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
+                    SafeRollback();
                     throw;
                 }
             }
@@ -132,6 +137,7 @@ namespace Bring.Sqlserver
             {
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.Build: Critical failure during build process - {ex.Message}");
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
+                SafeRollback();
                 throw;
             }
         }
@@ -195,9 +201,7 @@ namespace Bring.Sqlserver
             int skippedFields = 0;
             int ignoredFields = 0;
 
-            // Use o nome da lista para buscar os campos específicos no UserConfig.xml
             this.ColumnMappings = ConfigurationReader.GetSelectedColumns(this.List.Name);
-            this.IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
 
             foreach (Field field in this.List.Fields)
             {
@@ -207,7 +211,6 @@ namespace Bring.Sqlserver
                     {
                         string columnName = field.InternalName;
 
-                        // Se houver mapeamento de colunas, só processa as que estão no mapeamento e não estão ignoradas
                         if (this.ColumnMappings != null)
                         {
                             if (this.ColumnMappings.TryGetValue(columnName, out var mapping))
@@ -230,7 +233,6 @@ namespace Bring.Sqlserver
                                 Logger.Log(1, "[BuildDictionary] Skipped field (not mapped) " + columnName);
                             }
                         }
-                        // Se não houver mapeamento, processa todos (comportamento padrão)
                         else if (this.IgnoredColumns != null && this.IgnoredColumns.Contains(columnName))
                         {
                             ignoredFields++;
@@ -256,12 +258,16 @@ namespace Bring.Sqlserver
 
         private bool TableExists(string listName)
         {
+            if (_tableExistsCache.HasValue)
+                return _tableExistsCache.Value;
+
             try
             {
                 this.Command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @TableName";
                 this.Command.Parameters.Clear();
                 this.Command.Parameters.AddWithValue("@TableName", listName);
                 bool exists = (int)this.Command.ExecuteScalar() != 0;
+                _tableExistsCache = exists;
                 Logger.Log(1, $"[TableExists] Table '{listName}' exists: {exists}");
                 return exists;
             }
@@ -276,31 +282,21 @@ namespace Bring.Sqlserver
         private void CreateTable()
         {
             Logger.Log(1, "[CreateTable] Creating new table: " + this.TableName);
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.AppendLine($"CREATE TABLE [{this.TableName}] (");
-            stringBuilder.AppendLine("[Snapshot] datetime NULL,");
+            var sb = new StringBuilder();
+            sb.AppendLine($"CREATE TABLE [{this.TableName}] (");
+            sb.AppendLine("[Snapshot] datetime NULL,");
 
             foreach (var fn in this.FNDictionary)
             {
-                string sqlType = null;
-                // Verifica se há DataType definido no mapeamento
-                if (this.ColumnMappings != null && this.ColumnMappings.TryGetValue(fn.Value.InternalName, out var mapping) && !string.IsNullOrEmpty(mapping.DataType))
-                    sqlType = mapping.DataType;
-                else
-                    sqlType = this.SQLFieldType(fn.Value);
-
-                // Prevent SQL injection in DataType
+                string sqlType = ResolveSqlType(fn.Value);
                 if (sqlType != null)
-                {
-                    sqlType = sqlType.Replace(";", "").Replace("'", "").Replace("--", "");
-                    stringBuilder.AppendLine($"[{fn.Key}] {sqlType} NULL,");
-                }
+                    sb.AppendLine($"[{fn.Key}] {sqlType} NULL,");
             }
 
-            stringBuilder.Remove(stringBuilder.Length - 3, 3);
-            stringBuilder.Append(")");
+            sb.Remove(sb.Length - 3, 3);
+            sb.Append(")");
 
-            this.Command.CommandText = stringBuilder.ToString();
+            this.Command.CommandText = sb.ToString();
             try
             {
                 this.Command.ExecuteNonQuery();
@@ -316,127 +312,159 @@ namespace Bring.Sqlserver
         private void UpdateTableDesign()
         {
             Logger.Log(1, "[UpdateTableDesign] Updating design for table: " + this.TableName);
+
+            // Fetch existing columns once
+            var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                this.Command.CommandText = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @TableName";
+                this.Command.Parameters.Clear();
+                this.Command.Parameters.AddWithValue("@TableName", this.TableName);
+                using var reader = this.Command.ExecuteReader();
+                while (reader.Read())
+                    existingColumns.Add(reader.GetString(0));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.UpdateTableDesign: Failed to read existing columns - {ex.Message}");
+                throw;
+            }
+
             int updatedColumns = 0;
             int failedColumns = 0;
 
             foreach (var fn in this.FNDictionary)
             {
+                if (existingColumns.Contains(fn.Key)) continue;
+
                 try
                 {
-                    string sqlType = null;
-                    if (this.ColumnMappings != null && this.ColumnMappings.TryGetValue(fn.Value.InternalName, out var mapping) && !string.IsNullOrEmpty(mapping.DataType))
-                        sqlType = mapping.DataType;
-                    else
-                        sqlType = this.SQLFieldType(fn.Value);
+                    string sqlType = ResolveSqlType(fn.Value);
+                    if (sqlType == null) continue;
 
-                    // Prevent SQL injection in DataType
-                    if (sqlType != null)
-                        sqlType = sqlType.Replace(";", "").Replace("'", "").Replace("--", "");
-
-                    string colName = fn.Key;
-
-                    this.Command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColName";
+                    string safeTable = $"[{this.TableName.Replace("]", "]]")}]";
+                    string safeCol = $"[{fn.Key.Replace("]", "]]")}]";
+                    this.Command.CommandText = $"ALTER TABLE {safeTable} ADD {safeCol} {sqlType} NULL";
                     this.Command.Parameters.Clear();
-                    this.Command.Parameters.AddWithValue("@TableName", this.TableName);
-                    this.Command.Parameters.AddWithValue("@ColName", colName);
-                    if ((int)this.Command.ExecuteScalar() == 0)
-                    {
-                        string safeTable = $"[{this.TableName.Replace("]", "]]")}]";
-                        string safeCol = $"[{colName.Replace("]", "]]")}]";
-                        this.Command.CommandText = $"ALTER TABLE {safeTable} ADD {safeCol} {sqlType} NULL";
-                        this.Command.Parameters.Clear();
-                        this.Command.ExecuteNonQuery();
-                        updatedColumns++;
-                    }
+                    this.Command.ExecuteNonQuery();
+                    updatedColumns++;
                 }
                 catch (Exception ex)
                 {
                     failedColumns++;
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.UpdateTableDesign: Failed to update column: {fn.Key} - {ex.Message}");
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.UpdateTableDesign: Failed to add column: {fn.Key} - {ex.Message}");
                 }
             }
 
             Logger.Log(1, "[UpdateTableDesign] Design update completed. Updated: " + updatedColumns + ", Failed: " + failedColumns);
         }
 
+        private string ResolveSqlType(Field field)
+        {
+            string sqlType = null;
+            if (this.ColumnMappings != null &&
+                this.ColumnMappings.TryGetValue(field.InternalName, out var mapping) &&
+                !string.IsNullOrEmpty(mapping.DataType))
+            {
+                sqlType = mapping.DataType;
+            }
+            else
+            {
+                sqlType = this.SQLFieldType(field);
+            }
+
+            if (sqlType != null)
+            {
+                sqlType = sqlType.Replace(";", "").Replace("'", "").Replace("--", "");
+            }
+
+            return sqlType;
+        }
+
         private void TransferData(string snapDate)
         {
             Logger.Log(1, "[TransferData] Beginning data transfer for snapshot: " + snapDate);
-            string sqlColNames = this.GetSQLColNames();
+
+            var fieldList = new List<Field>(this.FNDictionary.Values);
+            string safeTable = $"[{this.TableName.Replace("]", "]]")}]";
+
+            // Build DataTable schema matching the SQL table
+            var dataTable = new DataTable { Locale = CultureInfo.InvariantCulture };
+            dataTable.Columns.Add("Snapshot", typeof(string));
+            foreach (var fn in this.FNDictionary)
+                dataTable.Columns.Add(fn.Key, typeof(object));
+
+            // Determine item source: paginated AllItems or direct ItemCollection
+            var items = this.List.AllItems ?? this.List.ItemCollection?.Cast<ListItem>().ToList();
+
+            if (items == null || items.Count == 0)
+            {
+                Logger.Log(1, "[TransferData] No items to transfer.");
+                return;
+            }
+
             int processedItems = 0;
             int failedItems = 0;
 
-            string safeTable = $"[{this.TableName.Replace("]", "]]")}]";
-            string insertBase = $"INSERT INTO {safeTable} {sqlColNames} VALUES (@Snapshot";
-
-            var fieldList = new List<Field>(this.FNDictionary.Values);
-            for (int i = 0; i < fieldList.Count; i++)
-                insertBase += $", @F{i}";
-            insertBase += ")";
-
-            foreach (ListItem listItem in this.List.ItemCollection)
+            foreach (ListItem listItem in items)
             {
                 try
                 {
-                    this.Command.CommandText = insertBase;
-                    this.Command.Parameters.Clear();
-                    this.Command.Parameters.AddWithValue("@Snapshot", snapDate);
+                    var row = dataTable.NewRow();
+                    row["Snapshot"] = snapDate;
 
                     int idx = 0;
                     foreach (Field field in fieldList)
                     {
+                        string colName = FNDictionary.Keys.ElementAt(idx);
                         object obj = listItem[field.InternalName];
-                        string paramName = $"@F{idx}";
-
-                        if (obj != null)
+                        row[colName] = obj switch
                         {
-                            if (obj is FieldLookupValue lookup)
-                                this.Command.Parameters.AddWithValue(paramName, lookup.LookupId);
-                            else if (obj is FieldUserValue user)
-                                this.Command.Parameters.AddWithValue(paramName, user.LookupId);
-                            else if (obj is FieldUrlValue url)
-                                this.Command.Parameters.AddWithValue(paramName, (object)url.Url ?? DBNull.Value);
-                            else if (obj is ContentTypeId ctId)
-                                this.Command.Parameters.AddWithValue(paramName, ctId.StringValue);
-                            else if (obj is DateTime dt)
-                                this.Command.Parameters.AddWithValue(paramName, dt);
-                            else if (obj is FieldLookupValue[] lookups)
-                            {
-                                this.Command.Parameters.AddWithValue(paramName, string.Join(";", lookups.Select(l => l.LookupId)));
-                            }
-                            else if (obj is FieldUserValue[] users)
-                            {
-                                this.Command.Parameters.AddWithValue(paramName, string.Join(";", users.Select(u => u.LookupId)));
-                            }
-                            else
-                            {
-                                this.Command.Parameters.AddWithValue(paramName, obj);
-                            }
-                        }
-                        else
-                        {
-                            this.Command.Parameters.AddWithValue(paramName, DBNull.Value);
-                        }
-
+                            null => DBNull.Value,
+                            FieldLookupValue l => l.LookupId,
+                            FieldUserValue u => u.LookupId,
+                            FieldUrlValue url => (object)url.Url ?? DBNull.Value,
+                            ContentTypeId ct => ct.StringValue,
+                            DateTime dt => dt,
+                            FieldLookupValue[] lookups => string.Join(";", lookups.Select(l => l.LookupId)),
+                            FieldUserValue[] users => string.Join(";", users.Select(u => u.LookupId)),
+                            _ => obj
+                        };
                         idx++;
                     }
 
-                    try
-                    {
-                        this.Command.ExecuteNonQuery();
-                        processedItems++;
-                    }
-                    catch (Exception ex)
-                    {
-                        failedItems++;
-                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TransferData: Failed to insert item {processedItems + failedItems} - {ex.Message}");
-                    }
+                    dataTable.Rows.Add(row);
+                    processedItems++;
                 }
                 catch (Exception ex)
                 {
                     failedItems++;
                     Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TransferData: Failed to process item {processedItems + failedItems} - {ex.Message}");
                 }
+            }
+
+            // Bulk insert into SQL
+            try
+            {
+                using var bulkCopy = new SqlBulkCopy(this.Connection)
+                {
+                    DestinationTableName = safeTable,
+                    BatchSize = 1000,
+                    BulkCopyTimeout = this.CommandTimeoutSeconds
+                };
+
+                foreach (DataColumn col in dataTable.Columns)
+                    bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+
+                bulkCopy.WriteToServer(dataTable);
+                Logger.Log(1, $"[TransferData] Bulk insert completed: {processedItems} rows");
+            }
+            catch (Exception ex)
+            {
+                failedItems += processedItems;
+                processedItems = 0;
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TransferData: Bulk insert failed - {ex.Message}");
+                throw;
             }
 
             Logger.Log(1, $"[TransferData] Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
@@ -512,8 +540,9 @@ namespace Bring.Sqlserver
                 string str = result.ToString();
                 return string.IsNullOrEmpty(str) ? null : str;
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.LogWarning($"[GetLastSyncDate] Failed to read last sync date for table '{this.TableName}': {ex.Message}");
                 return null;
             }
         }

@@ -15,7 +15,7 @@ namespace Bring.XmlConfig
     {
         private static string _configPath = "SPO_to_SQL_config.xml"; // valor padrão
         private static readonly object _lock = new object();
-        private static XmlDocument _xmlDoc;
+        private static volatile XmlDocument _xmlDoc;
 
         public static void SetConfigPath(string path)
         {
