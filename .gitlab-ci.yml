@@ -1,0 +1,60 @@
+image: mcr.microsoft.com/dotnet/sdk:8.0
+
+stages:
+  - build
+  - test
+  - quality
+  - security
+
+variables:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_NOLOGO: 'true'
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - ~/.nuget/packages/
+
+before_script:
+  - dotnet restore
+
+build:
+  stage: build
+  script:
+    - dotnet build --no-restore -warnaserror
+  artifacts:
+    paths:
+      - src/**/bin/
+      - src/**/obj/
+      - tests/**/bin/
+      - tests/**/obj/
+    expire_in: 1 hour
+
+test:
+  stage: test
+  dependencies:
+    - build
+  script:
+    - dotnet test --no-build --collect:"XPlat Code Coverage" --results-directory:./TestResults/
+  artifacts:
+    paths:
+      - ./TestResults/
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: ./TestResults/**/*.cobertura.xml
+    expire_in: 30 days
+
+format:
+  stage: quality
+  dependencies:
+    - build
+  script:
+    - dotnet format --verify-no-changes --no-restore
+  allow_failure: false
+
+nuget_audit:
+  stage: security
+  script:
+    - dotnet nuget audit
+  allow_failure: true
