@@ -10,6 +10,7 @@ namespace SPO2SQL.XmlConfig;
 public static class ConfigurationReader
 {
     private static string _configPath = "SPO_to_SQL_config.xml";
+    private static string _sharePointBaseUrlOverride;
     private static readonly object _lock = new object();
     private static XmlDocument _xmlDoc;
 
@@ -22,6 +23,22 @@ public static class ConfigurationReader
         {
             _configPath = path;
             _xmlDoc = null;
+        }
+    }
+
+    public static void SetSharePointBaseUrl(string baseUrl)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
+
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            throw new ArgumentException("SharePoint base URL must be an absolute HTTP or HTTPS URL.", nameof(baseUrl));
+        }
+
+        lock (_lock)
+        {
+            _sharePointBaseUrlOverride = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
         }
     }
 
@@ -309,6 +326,14 @@ public static class ConfigurationReader
 
     public static string GetSharePointBaseUrl()
     {
+        lock (_lock)
+        {
+            if (!string.IsNullOrEmpty(_sharePointBaseUrlOverride))
+            {
+                return _sharePointBaseUrlOverride;
+            }
+        }
+
         LoadConfig();
 
         try

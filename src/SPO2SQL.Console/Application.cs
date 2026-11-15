@@ -1,6 +1,7 @@
 using SPO2SQL.Configuration;
 using SPO2SQL.Models;
 using SPO2SQL.Security;
+using Microsoft.Data.SqlClient;
 
 namespace SPO2SQL;
 
@@ -161,6 +162,7 @@ public class Application : IHostedService
                 _sharePointOptions.Username,
                 _sharePointOptions.Password,
                 _sqlOptions.ConnectionString));
+        XmlConfig.ConfigurationReader.SetSharePointBaseUrl(_sharePointOptions.SiteUrl);
 
         string configPath = _appOptions.LegacyConfigPath ?? "";
         if (!Path.IsPathRooted(configPath))
@@ -205,7 +207,29 @@ public class Application : IHostedService
             _logger.LogWarning("SQL connection string does not contain a server keyword (Server=/Data Source=) - verify configuration");
         }
 
+        ValidateSqlEncryption();
+
         _logger.LogInformation("Health checks completed");
+    }
+
+    private void ValidateSqlEncryption()
+    {
+        if (!_sqlOptions.EnforceEncryption)
+        {
+            return;
+        }
+
+        var builder = new SqlConnectionStringBuilder(_sqlOptions.ConnectionString);
+        bool encryptionEnabled = builder.ContainsKey("Encrypt") &&
+            string.Equals(builder["Encrypt"]?.ToString(), "True", StringComparison.OrdinalIgnoreCase);
+        bool trustsServerCertificate = builder.ContainsKey("TrustServerCertificate") &&
+            string.Equals(builder["TrustServerCertificate"]?.ToString(), "True", StringComparison.OrdinalIgnoreCase);
+
+        if (!encryptionEnabled || trustsServerCertificate)
+        {
+            throw new InvalidOperationException(
+                "SQL encryption enforcement requires Encrypt=true and TrustServerCertificate=false.");
+        }
     }
 
     private void DemonstrateRecordModels()

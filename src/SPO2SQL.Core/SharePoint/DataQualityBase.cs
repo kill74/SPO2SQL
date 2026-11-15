@@ -46,6 +46,7 @@ internal abstract class DataQualityBase
         catch (Exception ex)
         {
             Logger.LogError($"Failed to build list '{listName}' on site '{site}'", ex);
+            list.Dispose();
             throw;
         }
     }

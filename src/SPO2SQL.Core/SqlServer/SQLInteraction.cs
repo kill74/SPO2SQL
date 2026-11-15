@@ -39,6 +39,7 @@ internal sealed class SQLInteraction : IDisposable
 
     public bool DailyMode { get; set; }
     public int CommandTimeoutSeconds { get; set; } = 300;
+    public CancellationToken CancellationToken { get; set; }
 
     private HashSet<string> IgnoredColumns { get; set; }
     public Dictionary<string, ColumnMapping> ColumnMappings { get; private set; }
@@ -91,6 +92,7 @@ internal sealed class SQLInteraction : IDisposable
             }
 
             InitializeCommandAndTransaction();
+            EnsureMetadataTable();
             CurrentTime = DateTime.Now.ToString(DATE_FORMAT);
 
             if (DailyMode && TableExists(TableName))
@@ -399,6 +401,8 @@ internal sealed class SQLInteraction : IDisposable
 
         foreach (ListItem listItem in List.ItemCollection)
         {
+            CancellationToken.ThrowIfCancellationRequested();
+
             try
             {
                 Command.CommandText = insertBase;
@@ -411,7 +415,11 @@ internal sealed class SQLInteraction : IDisposable
                     object obj;
                     try
                     { obj = listItem[field.InternalName]; }
-                    catch { obj = null; }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"Failed to read field '{field.InternalName}' for SharePoint item.", ex);
+                    }
                     string paramName = $"@F{idx}";
 
                     if (obj != null)
@@ -476,6 +484,27 @@ internal sealed class SQLInteraction : IDisposable
         }
 
         Logger.Log(1, $"[TransferData] Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
+
+        if (failedItems > 0)
+        {
+            throw new InvalidOperationException(
+                $"Data transfer failed for {failedItems} item(s); the transaction will be rolled back.");
+        }
+    }
+
+    private void EnsureMetadataTable()
+    {
+        Command.CommandText = @"
+IF OBJECT_ID(N'[Metadata]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [Metadata]
+    (
+        [TableName] nvarchar(255) NOT NULL CONSTRAINT [PK_Metadata] PRIMARY KEY,
+        [LastRefreshDate] datetime2 NULL
+    );
+END";
+        Command.Parameters.Clear();
+        Command.ExecuteNonQuery();
     }
 
     private static string SQLFieldType(Field field)
@@ -552,9 +581,10 @@ internal sealed class SQLInteraction : IDisposable
             string str = result.ToString();
             return string.IsNullOrEmpty(str) ? null : str;
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            throw new InvalidOperationException(
+                $"Failed to read synchronization metadata for table '{TableName}'.", ex);
         }
     }
 

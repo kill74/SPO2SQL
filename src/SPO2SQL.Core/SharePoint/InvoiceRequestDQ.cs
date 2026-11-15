@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
 using Microsoft.SharePoint.Client;
 using SPO2SQL.Logging;
 
@@ -37,7 +37,7 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
                 $"<Geq><FieldRef Name='Modified' /><Value Type='DateTime'>{cutoffIso}</Value></Geq>" +
                 "</Where></Query></View>";
 
-            var unitList = CreateAndBuildList(UNIT_LIST, UNIT_SITE, unitQuery);
+            using var unitList = CreateAndBuildList(UNIT_LIST, UNIT_SITE, unitQuery);
 
             var unitMap = new Dictionary<string, ListItem>();
             foreach (ListItem unit in unitList.ItemCollection)
@@ -58,7 +58,7 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
             Logger.LogDebug($"Found {unitMap.Count} recently modified Unit items");
 
             string invoiceQuery = BuildInvoiceQuery(unitMap);
-            var invoiceList = CreateAndBuildList(INVOICE_LIST, INVOICE_SITE, invoiceQuery);
+            using var invoiceList = CreateAndBuildList(INVOICE_LIST, INVOICE_SITE, invoiceQuery);
 
             if (invoiceList.ItemCollection.Count == 0)
             {
@@ -104,37 +104,13 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
             return "<View><Query></Query></View>";
         }
 
-        var xml = new StringBuilder("<View><Query><Where>");
+        var conditions = unitMap.Keys.Select(key =>
+            $"<Eq><FieldRef Name='{UNIT_LOOKUP_FIELD}' />" +
+            $"<Value Type='Text'>{CamlQueryBuilder.EscapeXmlValue(key)}</Value></Eq>");
 
-        for (int i = 1; i < unitMap.Count; i++)
-        {
-            xml.Append("<Or>");
-        }
-
-        bool first = true;
-        foreach (var key in unitMap.Keys)
-        {
-            xml.Append($"<Eq><FieldRef Name='{UNIT_LOOKUP_FIELD}' />" +
-                       $"<Value Type='Text'>{EscapeXmlValue(key)}</Value></Eq>");
-
-            if (!first)
-            {
-                xml.Append("</Or>");
-            }
-
-            first = false;
-        }
-
-        xml.Append("</Where></Query></View>");
-        return xml.ToString();
-    }
-
-    private static string EscapeXmlValue(string value)
-    {
-        return value?.Replace("&", "&amp;")
-                   ?.Replace("<", "&lt;")
-                   ?.Replace(">", "&gt;")
-                   ?.Replace("\"", "&quot;")
-                   ?.Replace("'", "&apos;") ?? "";
+        var conditionArray = conditions.ToArray();
+        return conditionArray.Length == 1
+            ? $"<View><Query><Where>{conditionArray[0]}</Where></Query></View>"
+            : CamlQueryBuilder.BuildOrQuery(conditionArray);
     }
 }
