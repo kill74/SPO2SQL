@@ -83,6 +83,7 @@ internal sealed class RefreshSQLLists
             Console.WriteLine("SPOtoSQLUpdate: FATAL ERROR - Exception during SPO to SQL update process.");
             Console.WriteLine("Exception: " + ex.Message);
             Console.WriteLine("Stack Trace: " + ex.StackTrace);
+            throw;
         }
 
         Logger.Log(2, "SPOtoSQLUpdate: SPO to SQL update completed.");
@@ -114,7 +115,7 @@ internal sealed class RefreshSQLLists
                 Console.WriteLine($"RefreshListsSQL: ERROR - Failed to initialize SPOList for '{listName}'.");
                 Console.WriteLine("Exception: " + ex.Message);
                 Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                return;
+                throw;
             }
 
             SQLInteraction sqlInteraction = null;
@@ -148,19 +149,25 @@ internal sealed class RefreshSQLLists
                 Console.WriteLine($"RefreshListsSQL: ERROR - Failed to build SQLInteraction for '{listName}'.");
                 Console.WriteLine("Exception: " + ex.Message);
                 Console.WriteLine("Stack Trace: " + ex.StackTrace);
-                return;
+                throw;
             }
             finally
             {
                 sqlInteraction?.Dispose();
+                spoList?.Dispose();
             }
 
             Logger.Log(2, $"RefreshListsSQL: Update for list '{listName}' completed.");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"RefreshListsSQL: FATAL ERROR updating list '{listName}': {ex.Message}");
             Console.WriteLine("Stack Trace: " + ex.StackTrace);
+            throw;
         }
     }
 }

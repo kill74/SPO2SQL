@@ -227,11 +227,6 @@ public class RetryPolicy
             return true;
         }
 
-        if (ex is TaskCanceledException)
-        {
-            return true;
-        }
-
         if (ex is OperationCanceledException)
         {
             return false;

@@ -293,9 +293,7 @@ internal sealed class SQLInteraction : IDisposable
     private void CreateTable()
     {
         Logger.Log(1, "[CreateTable] Creating new table: " + TableName);
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.AppendLine($"CREATE TABLE [{TableName.Replace("]", "]]")}] (");
-        stringBuilder.AppendLine("[Snapshot] datetime NULL,");
+        var columns = new List<string> { "[Snapshot] datetime NULL" };
 
         foreach (var fn in FNDictionary)
         {
@@ -311,14 +309,12 @@ internal sealed class SQLInteraction : IDisposable
 
             if (sqlType != null)
             {
-                stringBuilder.AppendLine($"[{fn.Key}] {sqlType} NULL,");
+                columns.Add($"[{fn.Key.Replace("]", "]]")}] {sqlType} NULL");
             }
         }
 
-        stringBuilder.Remove(stringBuilder.Length - 3, 3);
-        stringBuilder.Append(')');
-
-        Command.CommandText = stringBuilder.ToString();
+        Command.CommandText =
+            $"CREATE TABLE [{TableName.Replace("]", "]]")}] ({string.Join(", ", columns)})";
         try
         {
             Command.ExecuteNonQuery();
@@ -500,7 +496,7 @@ internal sealed class SQLInteraction : IDisposable
             case "UserMulti":
                 return "[nvarchar](MAX)";
             case "ContentTypeId":
-                return "[varbinary](MAX)";
+                return "[nvarchar](MAX)";
             case "Counter":
             case "Integer":
             case "ModStat":
@@ -525,16 +521,13 @@ internal sealed class SQLInteraction : IDisposable
 
     private string GetSQLColNames()
     {
-        var sb = new StringBuilder();
-        sb.Append("([Snapshot], ");
+        var columns = new List<string> { "[Snapshot]" };
         foreach (var fn in FNDictionary)
         {
-            sb.Append($"[{fn.Key}], ");
+            columns.Add($"[{fn.Key.Replace("]", "]]")}]");
         }
 
-        sb.Remove(sb.Length - 2, 2);
-        sb.Append(')');
-        return sb.ToString();
+        return $"({string.Join(", ", columns)})";
     }
 
     private string GetLastSyncDate()

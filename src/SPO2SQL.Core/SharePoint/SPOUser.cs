@@ -37,6 +37,7 @@ public class SPOUser : IDisposable
 
         Username = username;
         _plainPassword = password;
+        Credentials = new NetworkCredential(username, password);
 
         _securePassword = new SecureString();
         foreach (char c in password)
@@ -64,7 +65,6 @@ public class SPOUser : IDisposable
 
         try
         {
-            var accounts = await app.GetAccountsAsync();
             _tokenResult = await app.AcquireTokenByUsernamePassword(
                 new[] { scope },
                 Username,
@@ -90,17 +90,13 @@ public class SPOUser : IDisposable
 
     public void ApplyAuthentication(ClientContext ctx, string siteUrl)
     {
-        ctx.ExecutingWebRequest += async (sender, e) =>
+        ArgumentNullException.ThrowIfNull(ctx);
+        ArgumentException.ThrowIfNullOrWhiteSpace(siteUrl);
+
+        ctx.ExecutingWebRequest += (sender, e) =>
         {
-            try
-            {
-                string token = await GetAccessTokenAsync(siteUrl);
-                e.WebRequestExecutor.RequestHeaders["Authorization"] = "Bearer " + token;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError("Failed to apply authentication token", ex);
-            }
+            string token = GetAccessTokenAsync(siteUrl).GetAwaiter().GetResult();
+            e.WebRequestExecutor.RequestHeaders["Authorization"] = "Bearer " + token;
         };
     }
 

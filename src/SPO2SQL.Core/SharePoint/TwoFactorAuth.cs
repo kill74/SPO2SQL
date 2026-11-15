@@ -132,7 +132,7 @@ public static class TwoFactorAuth
             Array.Reverse(counterBytes);
         }
 
-        using var hmac = new HMACSHA256(secret);
+        using var hmac = new HMACSHA1(secret);
         byte[] hash = hmac.ComputeHash(counterBytes);
 
         int offset = hash[^1] & 0xf;
