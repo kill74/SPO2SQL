@@ -39,6 +39,7 @@ internal sealed class RefreshSQLLists
             using (user)
             {
                 var listConfigs = ConfigurationReader.GetListConfigurations();
+                int failedLists = 0;
                 if (listConfigs != null)
                 {
                     foreach (var kvp in listConfigs)
@@ -65,11 +66,18 @@ internal sealed class RefreshSQLLists
                         }
                         catch (Exception ex)
                         {
+                            failedLists++;
                             Console.WriteLine($"SPOtoSQLUpdate: ERROR - Exception while updating list '{listName}'.");
                             Console.WriteLine("Exception: " + ex.Message);
                             Console.WriteLine("Stack Trace: " + ex.StackTrace);
                         }
                     }
+                }
+
+                if (failedLists > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Synchronization failed for {failedLists} configured list(s).");
                 }
             }
         }
@@ -125,7 +133,8 @@ internal sealed class RefreshSQLLists
                 {
                     List = spoList,
                     DailyMode = daily,
-                    CommandTimeoutSeconds = 300
+                    CommandTimeoutSeconds = 300,
+                    CancellationToken = cancellationToken
                 };
 
                 cancellationToken.ThrowIfCancellationRequested();

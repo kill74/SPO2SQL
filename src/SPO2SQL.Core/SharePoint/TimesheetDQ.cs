@@ -32,7 +32,7 @@ internal sealed class TimesheetDQ : DataQualityBase
                 "</IsNull></Where></Query>" +
                 "</View>";
 
-            var timesheetList = CreateAndBuildList(TIMESHEET_LIST, TIMESHEET_SITE, camlQuery);
+            using var timesheetList = CreateAndBuildList(TIMESHEET_LIST, TIMESHEET_SITE, camlQuery);
 
             if (timesheetList.ItemCollection.Count == 0)
             {
@@ -94,12 +94,12 @@ internal sealed class TimesheetDQ : DataQualityBase
             string camlUnitQuery =
                 "<View>" +
                 "<Query><Where><And>" +
-                $"<Eq><FieldRef Name='Project_x0020_ID' /><Value Type='Text'>{projectLookup.LookupValue}</Value></Eq>" +
+                $"<Eq><FieldRef Name='Project_x0020_ID' /><Value Type='Text'>{CamlQueryBuilder.EscapeXmlValue(projectLookup.LookupValue)}</Value></Eq>" +
                 "<Eq><FieldRef Name='Active' /><Value Type='Text'>Yes</Value></Eq>" +
                 "</And></Where></Query>" +
                 "</View>";
 
-            var unitList = CreateAndBuildList(UNIT_LIST, UNIT_SITE, camlUnitQuery);
+            using var unitList = CreateAndBuildList(UNIT_LIST, UNIT_SITE, camlUnitQuery);
             return unitList.ItemCollection.Count > 0 ? unitList.ItemCollection[0] : null;
         }
         catch (Exception ex)
@@ -127,7 +127,7 @@ internal sealed class TimesheetDQ : DataQualityBase
                 "</Where></Query>" +
                 "</View>";
 
-            var hrList = CreateAndBuildList(HR_LIST, HR_SITE, camlPersonQuery);
+            using var hrList = CreateAndBuildList(HR_LIST, HR_SITE, camlPersonQuery);
             if (hrList.ItemCollection.Count > 0)
             {
                 return GetFieldValue<FieldUserValue>(hrList.ItemCollection[0], "Approver1");
