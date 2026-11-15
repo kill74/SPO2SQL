@@ -15,9 +15,19 @@ public static class ConfigurationReader
 
     public static void SetConfigPath(string path)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
         Logger.LogDebug($"Setting configuration path to: {path}");
-        _configPath = path;
-        _xmlDoc = null;
+        lock (_lock)
+        {
+            _configPath = path;
+            _xmlDoc = null;
+        }
+    }
+
+    private static bool ParseBoolean(string value, bool defaultValue)
+    {
+        return bool.TryParse(value, out var result) ? result : defaultValue;
     }
 
     private static void LoadConfig()
@@ -33,8 +43,15 @@ public static class ConfigurationReader
             {
                 try
                 {
-                    _xmlDoc = new XmlDocument();
-                    _xmlDoc.Load(_configPath);
+                    var settings = new XmlReaderSettings
+                    {
+                        DtdProcessing = DtdProcessing.Prohibit,
+                        XmlResolver = null
+                    };
+
+                    _xmlDoc = new XmlDocument { XmlResolver = null };
+                    using var reader = XmlReader.Create(_configPath, settings);
+                    _xmlDoc.Load(reader);
                     Logger.LogDebug($"Configuration file loaded successfully from {_configPath}");
                 }
                 catch (Exception ex)
@@ -431,7 +448,7 @@ public static class ConfigurationReader
                     {
                         Name = nameAttr.Value,
                         SharepointList = contextAttr?.Value,
-                        Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value),
+                        Ignore = ParseBoolean(ignoreAttr?.Value, false),
                         Columns = GetListColumns(listNode)
                     };
 
@@ -471,7 +488,7 @@ public static class ConfigurationReader
                 {
                     Source = sourceAttr.Value,
                     Destination = destAttr?.Value ?? sourceAttr.Value,
-                    Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value),
+                    Ignore = ParseBoolean(ignoreAttr?.Value, false),
                     DataType = datatypeAttr?.Value
                 };
 

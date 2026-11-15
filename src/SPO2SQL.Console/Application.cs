@@ -1,5 +1,6 @@
 using SPO2SQL.Configuration;
 using SPO2SQL.Models;
+using SPO2SQL.Security;
 
 namespace SPO2SQL;
 
@@ -155,6 +156,12 @@ public class Application : IHostedService
 
     private void ConfigureLegacyBridge()
     {
+        CredentialManager.RegisterFallbackProvider(
+            new StaticCredentialProvider(
+                _sharePointOptions.Username,
+                _sharePointOptions.Password,
+                _sqlOptions.ConnectionString));
+
         string configPath = _appOptions.LegacyConfigPath ?? "";
         if (!Path.IsPathRooted(configPath))
         {

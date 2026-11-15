@@ -33,14 +33,30 @@ public static class CredentialManager
     public static void RegisterProvider(ICredentialProvider provider)
     {
         EnsureInitialized();
-        Providers.Insert(0, provider);
+        ArgumentNullException.ThrowIfNull(provider);
+
+        lock (_lock)
+        {
+            Providers.Insert(0, provider);
+        }
+    }
+
+    public static void RegisterFallbackProvider(ICredentialProvider provider)
+    {
+        EnsureInitialized();
+        ArgumentNullException.ThrowIfNull(provider);
+
+        lock (_lock)
+        {
+            Providers.Add(provider);
+        }
     }
 
     public static (string Username, string Password) GetSharePointCredentials()
     {
         EnsureInitialized();
 
-        foreach (var provider in Providers)
+        foreach (var provider in GetProvidersSnapshot())
         {
             var result = provider.GetCredentials();
             if (result != null && !string.IsNullOrEmpty(result.Value.Username) && !string.IsNullOrEmpty(result.Value.Password))
@@ -57,7 +73,7 @@ public static class CredentialManager
     {
         EnsureInitialized();
 
-        foreach (var provider in Providers)
+        foreach (var provider in GetProvidersSnapshot())
         {
             var result = provider.GetCredentials();
             if (result != null && !string.IsNullOrEmpty(result.Value.SqlConnectionString))
@@ -68,5 +84,13 @@ public static class CredentialManager
         }
 
         throw new InvalidOperationException("No credential provider returned a valid SQL connection string.");
+    }
+
+    private static ICredentialProvider[] GetProvidersSnapshot()
+    {
+        lock (_lock)
+        {
+            return Providers.ToArray();
+        }
     }
 }

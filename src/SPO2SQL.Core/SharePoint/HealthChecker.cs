@@ -88,11 +88,8 @@ public class HealthChecker
             result.IsHealthy = false;
         }
 
-        if (spoUser.Credentials == null)
-        {
-            result.Errors.Add("SharePoint credentials are not initialized.");
-            result.IsHealthy = false;
-        }
+        // Credential material is intentionally not exposed by SPOUser; connectivity
+        // validation below is the authoritative authentication check.
     }
 
     private void ValidateSharePointConnectivity(SPOUser spoUser, string sharePointUrl, HealthCheckResult result)

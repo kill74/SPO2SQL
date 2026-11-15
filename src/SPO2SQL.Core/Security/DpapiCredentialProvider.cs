@@ -2,11 +2,14 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace SPO2SQL.Security;
 
 public class DpapiCredentialProvider : ICredentialProvider
 {
+    private sealed record StoredCredentials(string Username, string Password, string SqlConnectionString);
+
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "SPO2SQL",
@@ -25,9 +28,9 @@ public class DpapiCredentialProvider : ICredentialProvider
             byte[] decrypted = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
             string plaintext = Encoding.UTF8.GetString(decrypted);
 
-            string[] parts = plaintext.Split('|');
-            return parts.Length >= 3
-                ? (parts[0], parts[1], parts[2])
+            var credentials = JsonSerializer.Deserialize<StoredCredentials>(plaintext);
+            return credentials is { Username.Length: > 0, Password.Length: > 0 }
+                ? (credentials.Username, credentials.Password, credentials.SqlConnectionString ?? string.Empty)
                 : null;
         }
         catch
@@ -41,7 +44,12 @@ public class DpapiCredentialProvider : ICredentialProvider
         string dir = Path.GetDirectoryName(FilePath);
         Directory.CreateDirectory(dir);
 
-        string plaintext = $"{username}|{password}|{connectionString}";
+        ArgumentException.ThrowIfNullOrWhiteSpace(username);
+        ArgumentNullException.ThrowIfNull(password);
+        ArgumentNullException.ThrowIfNull(connectionString);
+
+        string plaintext = JsonSerializer.Serialize(
+            new StoredCredentials(username, password, connectionString));
         byte[] data = Encoding.UTF8.GetBytes(plaintext);
         byte[] encrypted = ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser);
 
