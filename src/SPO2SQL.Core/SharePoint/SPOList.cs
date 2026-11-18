@@ -12,11 +12,16 @@ public class SPOList : Context
 {
     private static readonly string[] s_nullArray = ["NULL"];
 
+    private const int DefaultPageSize = 500;
+
     private List _list;
 
     public string Name { get; set; }
 
-    public ListItemCollection ItemCollection { get; set; }
+    /// <summary>
+    /// All items returned by the query, across every SharePoint page.
+    /// </summary>
+    public IReadOnlyList<ListItem> ItemCollection { get; private set; } = Array.Empty<ListItem>();
 
     public FieldCollection Fields { get; set; }
 
@@ -39,19 +44,29 @@ public class SPOList : Context
             }
 
             CamlQuery camlQuery = string.IsNullOrEmpty(CAMLQuery)
-                ? CamlQuery.CreateAllItemsQuery()
+                ? CamlQuery.CreateAllItemsQuery(DefaultPageSize)
                 : new CamlQuery { ViewXml = CAMLQuery };
 
             _list = web.Lists.GetByTitle(Name);
-            ItemCollection = _list.GetItems(camlQuery);
             Fields = _list.Fields;
 
             Ctx.Load(_list);
-            Ctx.Load(ItemCollection);
             Ctx.Load(Fields);
-
-            Logger.Log(2, "Executing query to retrieve list items");
             Ctx.ExecuteQuery();
+
+            var items = new List<ListItem>();
+            do
+            {
+                ListItemCollection page = _list.GetItems(camlQuery);
+                Ctx.Load(page);
+                Ctx.ExecuteQuery();
+
+                items.AddRange(page);
+                camlQuery.ListItemCollectionPosition = page.ListItemCollectionPosition;
+            }
+            while (camlQuery.ListItemCollectionPosition != null);
+
+            ItemCollection = items;
 
             Logger.LogDebug($"Successfully loaded {ItemCollection.Count} items from list '{Name}'");
         }
@@ -61,6 +76,10 @@ public class SPOList : Context
             throw;
         }
     }
+
+    public ListItem GetItemById(int id) =>
+        ItemCollection.FirstOrDefault(item => item.Id == id)
+        ?? throw new InvalidOperationException($"Item with ID {id} was not loaded from list '{Name}'.");
 
     public void Update()
     {

@@ -13,8 +13,7 @@ namespace SPO2SQL.SqlServer;
 
 internal sealed class SQLInteraction : IDisposable
 {
-    private const string DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.fff";
-    private const string FUTURE_DATE = "2100-01-01 00:00:00.000";
+    private static readonly DateTime FutureSnapshot = new(2100, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static readonly HashSet<string> ValidSqlTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -35,7 +34,11 @@ internal sealed class SQLInteraction : IDisposable
     public SPOList List { get; set; }
     public string TableName { get; private set; }
     public Dictionary<string, Field> FNDictionary { get; private set; }
-    public string CurrentTime { get; private set; }
+    /// <summary>
+    /// Watermark captured before the SharePoint read. Reusing this value on the next
+    /// incremental run ensures items changed while the sync was running are not lost.
+    /// </summary>
+    public DateTime CurrentTime { get; private set; }
 
     public bool DailyMode { get; set; }
     public int CommandTimeoutSeconds { get; set; } = 300;
@@ -61,6 +64,7 @@ internal sealed class SQLInteraction : IDisposable
             SafeRollback();
         }
 
+        Transaction?.Dispose();
         Command?.Dispose();
         Connection?.Close();
         Connection?.Dispose();
@@ -91,18 +95,18 @@ internal sealed class SQLInteraction : IDisposable
                 throw;
             }
 
-            InitializeCommandAndTransaction();
+            InitializeCommand();
             EnsureMetadataTable();
-            CurrentTime = DateTime.Now.ToString(DATE_FORMAT);
+            CurrentTime = DateTime.UtcNow;
 
             if (DailyMode && TableExists(TableName))
             {
-                string lastSync = GetLastSyncDate();
-                if (lastSync != null)
+                DateTime? lastSync = GetLastSyncDate();
+                if (lastSync.HasValue)
                 {
-                    Logger.Log(1, "[Build] Applying incremental filter: Modified >= " + lastSync);
+                    Logger.Log(1, "[Build] Applying incremental filter: Modified >= " + lastSync.Value.ToString("O", CultureInfo.InvariantCulture));
                     List.CAMLQuery = CamlQueryBuilder.BuildDateRangeQuery("Modified",
-                        DateTime.Parse(lastSync), DateTime.Now);
+                        lastSync.Value, CurrentTime);
                 }
             }
 
@@ -165,12 +169,14 @@ internal sealed class SQLInteraction : IDisposable
         {
             Logger.Log(2, "[DailyUpdate] Starting daily update for table " + TableName);
 
+            BeginTransaction();
+
             Command.CommandText = $"DELETE FROM [{TableName.Replace("]", "]]")}] WHERE Snapshot = @FutureDate";
             Command.Parameters.Clear();
-            Command.Parameters.AddWithValue("@FutureDate", FUTURE_DATE);
+            Command.Parameters.AddWithValue("@FutureDate", FutureSnapshot);
             Command.ExecuteNonQuery();
 
-            TransferData(FUTURE_DATE);
+            TransferData(FutureSnapshot);
 
             UpdateMetadata();
 
@@ -192,6 +198,8 @@ internal sealed class SQLInteraction : IDisposable
         try
         {
             Logger.Log(2, "[CurrentTimeUpdate] Starting current-time update for " + TableName);
+
+            BeginTransaction();
 
             TransferData(CurrentTime);
 
@@ -295,7 +303,7 @@ internal sealed class SQLInteraction : IDisposable
     private void CreateTable()
     {
         Logger.Log(1, "[CreateTable] Creating new table: " + TableName);
-        var columns = new List<string> { "[Snapshot] datetime NULL" };
+        var columns = new List<string> { "[Snapshot] datetime2 NULL" };
 
         foreach (var fn in FNDictionary)
         {
@@ -381,7 +389,7 @@ internal sealed class SQLInteraction : IDisposable
         Logger.Log(1, "[UpdateTableDesign] Design update completed. Updated: " + updatedColumns + ", Failed: " + failedColumns);
     }
 
-    private void TransferData(string snapDate)
+    private void TransferData(DateTime snapDate)
     {
         Logger.Log(1, "[TransferData] Beginning data transfer for snapshot: " + snapDate);
         string sqlColNames = GetSQLColNames();
@@ -559,7 +567,7 @@ END";
         return $"({string.Join(", ", columns)})";
     }
 
-    private string GetLastSyncDate()
+    private DateTime? GetLastSyncDate()
     {
         try
         {
@@ -575,11 +583,16 @@ END";
 
             if (result is DateTime dt)
             {
-                return dt.ToString(DATE_FORMAT);
+                return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
             }
 
-            string str = result.ToString();
-            return string.IsNullOrEmpty(str) ? null : str;
+            return DateTime.TryParse(
+                result.ToString(),
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                out DateTime parsed)
+                ? parsed
+                : null;
         }
         catch (Exception ex)
         {
@@ -679,12 +692,19 @@ END";
             .Replace("X003a", string.Empty);
     }
 
-    private void InitializeCommandAndTransaction()
+    private void InitializeCommand()
     {
         Command = Connection.CreateCommand();
         Command.CommandTimeout = CommandTimeoutSeconds;
+    }
+
+    /// <summary>
+    /// Starts the write transaction only after all SharePoint data has been read and
+    /// transformed, so no database locks are held during network calls.
+    /// </summary>
+    private void BeginTransaction()
+    {
         Transaction = Connection.BeginTransaction($"{TableName} TXN");
-        Command.Connection = Connection;
         Command.Transaction = Transaction;
     }
 

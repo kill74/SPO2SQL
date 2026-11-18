@@ -10,11 +10,14 @@ internal sealed class Program
         try
         {
             var builder = CreateHostBuilder(args);
-            using var host = builder.Build();
+            var host = builder.Build();
+
+            // RunAsync disposes the host when it completes, so resolve the outcome first.
+            var exitCode = host.Services.GetRequiredService<SyncExitCode>();
 
             await host.RunAsync();
 
-            return 0;
+            return exitCode.Value;
         }
         catch (OptionsValidationException ex)
         {
@@ -81,6 +84,7 @@ internal sealed class Program
                     .ValidateDataAnnotations()
                     .ValidateOnStart();
 
+                services.AddSingleton<SyncExitCode>();
                 services.AddHttpClient();
                 services.AddHostedService<Application>();
             });
