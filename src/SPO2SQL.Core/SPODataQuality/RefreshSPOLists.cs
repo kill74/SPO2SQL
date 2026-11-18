@@ -494,7 +494,7 @@ internal sealed class RefreshSPOLists
                     {
                         try
                         {
-                            destList.ItemCollection.GetById(id)[actualFields[index2, 0]] = sourceList.ItemCollection[index1][actualFields[index2, 1]];
+                            destList.GetItemById(id)[actualFields[index2, 0]] = sourceList.ItemCollection[index1][actualFields[index2, 1]];
                         }
                         catch (Exception ex)
                         {
@@ -504,7 +504,7 @@ internal sealed class RefreshSPOLists
                     }
                     try
                     {
-                        destList.ItemCollection.GetById(id).Update();
+                        destList.GetItemById(id).Update();
                     }
                     catch (Exception ex)
                     {
