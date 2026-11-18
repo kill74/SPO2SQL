@@ -24,5 +24,5 @@ public record ApplicationOptions
     public bool DailyMode { get; init; } = true;
 
     [Required]
-    public string LegacyConfigPath { get; init; } = "XmlConfig\\UserConfig.xml";
+    public string LegacyConfigPath { get; init; } = "XmlConfig/UserConfig.xml";
 }

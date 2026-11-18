@@ -42,6 +42,12 @@ internal sealed class SQLInteraction : IDisposable
 
     public bool DailyMode { get; set; }
     public int CommandTimeoutSeconds { get; set; } = 300;
+
+    /// <summary>Items successfully written during the last transfer.</summary>
+    public int ProcessedItems { get; private set; }
+
+    /// <summary>Items that failed to be written during the last transfer.</summary>
+    public int FailedItems { get; private set; }
     public CancellationToken CancellationToken { get; set; }
 
     private HashSet<string> IgnoredColumns { get; set; }
@@ -490,6 +496,9 @@ internal sealed class SQLInteraction : IDisposable
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TransferData: Failed to process item {processedItems + failedItems} - {ex.Message}");
             }
         }
+
+        ProcessedItems = processedItems;
+        FailedItems = failedItems;
 
         Logger.Log(1, $"[TransferData] Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
 
