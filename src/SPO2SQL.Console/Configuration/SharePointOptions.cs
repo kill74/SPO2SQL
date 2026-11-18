@@ -44,6 +44,14 @@ public record SharePointOptions : IValidatableObject
             !string.IsNullOrWhiteSpace(Username) &&
             !string.IsNullOrWhiteSpace(Password);
 
+        if (Uri.TryCreate(SiteUrl, UriKind.Absolute, out var siteUri) &&
+            siteUri.Scheme != Uri.UriSchemeHttps)
+        {
+            yield return new ValidationResult(
+                "SharePoint site URL must use HTTPS.",
+                [nameof(SiteUrl)]);
+        }
+
         if (!string.IsNullOrWhiteSpace(Username) &&
             !new EmailAddressAttribute().IsValid(Username))
         {

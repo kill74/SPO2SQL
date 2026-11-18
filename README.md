@@ -15,7 +15,7 @@
 - **Safe schema evolution** — destination tables are created on first run and extended additively when new source columns appear; no destructive DDL.
 - **Explicit mappings** — per-list and per-column rules for inclusion, exclusion, destination names and SQL types, sourced from a legacy XML file.
 - **Resilience** — transient SharePoint/network failures are retried with exponential backoff and jitter; a cancelled run rolls back cleanly.
-- **Transactional writes** — SharePoint data is read and transformed before a SQL transaction is opened, so no locks are held during network calls.
+- **Transactional bulk writes** — SharePoint data is read and transformed before a SQL transaction is opened; rows are then loaded with `SqlBulkCopy` in configurable batches, so no locks are held during network calls and the number of SQL round trips is constant.
 - **App-only authentication** — certificate-based client credentials work under MFA and Conditional Access; username/password remains a legacy fallback.
 - **Startup health checks** — authenticated SharePoint connectivity and a real SQL connection are verified before any sync starts.
 - **Observability** — structured logging across host and core, plus optional per-list statistics (items, successes, failures, duration, throughput).
@@ -146,6 +146,8 @@ Example:
 }
 ```
 
+`Sql:BatchSize` controls both the SharePoint page size and the number of rows sent per SQL bulk-copy batch.
+
 Supply secrets outside source control. For local development:
 
 ```bash
@@ -217,6 +219,9 @@ CodeQL analysis is configured separately. GitLab CI mirrors the build, test, for
 - Never commit credentials, certificates or connection strings.
 - Prefer app-only authentication and least-privilege SQL identities.
 - Keep `EnforceEncryption` enabled outside isolated development environments.
+- `SharePoint:SiteUrl` must use HTTPS; startup validation rejects plain HTTP.
+- The Windows credential store file is ACL-restricted to the current user in addition to being DPAPI-encrypted.
+- Legacy username/password authentication emits an explicit startup warning.
 - Environment-backed secrets survive credential rotation without redeploying binaries.
 - Stack traces are logged through the structured logger, not written ad-hoc to stdout.
 

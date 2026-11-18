@@ -1,3 +1,4 @@
+using System.Data;
 using System.Globalization;
 using System.Text;
 using Microsoft.Data.SqlClient;
@@ -40,6 +41,10 @@ internal sealed class SQLInteraction : IDisposable
 
     public bool DailyMode { get; set; }
     public int CommandTimeoutSeconds { get; set; } = 300;
+
+    /// <summary>Rows sent to SQL Server per bulk-copy batch.</summary>
+    public int BatchSize { get; set; } = 80;
+
     public CancellationToken CancellationToken { get; set; }
 
     /// <summary>Items successfully written during the last transfer.</summary>
@@ -84,7 +89,9 @@ internal sealed class SQLInteraction : IDisposable
 
         CurrentTime = DateTime.UtcNow;
 
-        if (DailyMode && await TableExistsAsync(TableName).ConfigureAwait(false))
+        bool tableExists = await TableExistsAsync(TableName).ConfigureAwait(false);
+
+        if (DailyMode && tableExists)
         {
             DateTime? lastSync = await GetLastSyncDateAsync().ConfigureAwait(false);
             if (lastSync.HasValue)
@@ -100,7 +107,7 @@ internal sealed class SQLInteraction : IDisposable
         FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
         BuildDictionary();
 
-        if (!await TableExistsAsync(TableName).ConfigureAwait(false))
+        if (!tableExists)
         {
             Logger.Log(1, "[Build] Creating new table: " + TableName);
             await CreateTableAsync().ConfigureAwait(false);
@@ -307,72 +314,87 @@ internal sealed class SQLInteraction : IDisposable
         return SQLFieldType(field);
     }
 
+    /// <summary>
+    /// Materializes the SharePoint items once and writes them with a single bulk
+    /// operation instead of one command per row. All conversion work happens before
+    /// the SQL write, so the transaction stays open for the shortest possible time.
+    /// </summary>
     private async Task TransferDataAsync(DateTime snapDate)
     {
-        Logger.Log(1, "[TransferData] Beginning data transfer for snapshot: " + snapDate);
+        Logger.Log(1, "[TransferData] Building bulk-copy batch for snapshot: " + snapDate);
 
-        string sqlColNames = GetSQLColNames();
-        int processedItems = 0;
-        int failedItems = 0;
-
-        string safeTable = $"[{TableName.Replace("]", "]]")}]";
-        string insertBase = $"INSERT INTO {safeTable} {sqlColNames} VALUES (@Snapshot";
-
-        var fieldList = new List<Field>(FNDictionary.Values);
-        for (int i = 0; i < fieldList.Count; i++)
+        using DataTable batch = BuildInsertBatch(snapDate);
+        if (batch.Rows.Count == 0)
         {
-            insertBase += $", @F{i}";
+            ProcessedItems = 0;
+            FailedItems = 0;
+            Logger.Log(1, "[TransferData] No items to transfer.");
+            return;
         }
 
-        insertBase += ")";
+        string safeTable = $"[{TableName.Replace("]", "]]")}]";
 
-        foreach (ListItem listItem in List.ItemCollection)
+        using var bulkCopy = new SqlBulkCopy(
+            Connection!,
+            SqlBulkCopyOptions.TableLock |
+            SqlBulkCopyOptions.CheckConstraints |
+            SqlBulkCopyOptions.FireTriggers,
+            Transaction)
+        {
+            DestinationTableName = safeTable,
+            BatchSize = BatchSize,
+            BulkCopyTimeout = CommandTimeoutSeconds
+        };
+
+        foreach (DataColumn column in batch.Columns)
+        {
+            bulkCopy.ColumnMappings.Add(column.ColumnName, column.ColumnName);
+        }
+
+        await bulkCopy.WriteToServerAsync(batch, CancellationToken).ConfigureAwait(false);
+
+        ProcessedItems = batch.Rows.Count;
+        FailedItems = 0;
+
+        Logger.Log(1, $"[TransferData] Transfer completed. Processed: {ProcessedItems}, Failed: 0");
+    }
+
+    private DataTable BuildInsertBatch(DateTime snapDate)
+    {
+        var batch = new DataTable();
+        batch.Columns.Add("Snapshot", typeof(DateTime));
+        foreach (var mapping in FNDictionary)
+        {
+            batch.Columns.Add(mapping.Key, typeof(object));
+        }
+
+        foreach (ListItem item in List.ItemCollection)
         {
             CancellationToken.ThrowIfCancellationRequested();
 
-            try
+            DataRow row = batch.NewRow();
+            row["Snapshot"] = snapDate;
+
+            foreach (var mapping in FNDictionary)
             {
-                Command!.CommandText = insertBase;
-                Command.Parameters.Clear();
-                Command.Parameters.AddWithValue("@Snapshot", snapDate);
-
-                for (int idx = 0; idx < fieldList.Count; idx++)
+                object rawValue;
+                try
                 {
-                    Field field = fieldList[idx];
-                    object obj;
-                    try
-                    {
-                        obj = listItem[field.InternalName];
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new InvalidOperationException(
-                            $"Failed to read field '{field.InternalName}' for SharePoint item.", ex);
-                    }
-
-                    Command.Parameters.AddWithValue($"@F{idx}", ConvertFieldValue(obj));
+                    rawValue = item[mapping.Value.InternalName];
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to read field '{mapping.Value.InternalName}' for SharePoint item.", ex);
                 }
 
-                await Command.ExecuteNonQueryAsync(CancellationToken).ConfigureAwait(false);
-                processedItems++;
+                row[mapping.Key] = ConvertFieldValue(rawValue) ?? DBNull.Value;
             }
-            catch (Exception ex)
-            {
-                failedItems++;
-                Logger.LogError($"Failed to insert item {processedItems + failedItems}", ex);
-            }
+
+            batch.Rows.Add(row);
         }
 
-        ProcessedItems = processedItems;
-        FailedItems = failedItems;
-
-        Logger.Log(1, $"[TransferData] Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
-
-        if (failedItems > 0)
-        {
-            throw new InvalidOperationException(
-                $"Data transfer failed for {failedItems} item(s); the transaction will be rolled back.");
-        }
+        return batch;
     }
 
     private static object ConvertFieldValue(object obj) => obj switch
@@ -425,17 +447,6 @@ END";
     {
         Logger.Log(1, $"[SQLFieldType] Unknown field type encountered - Field: {field.Title}, Type: {field.TypeAsString}");
         return null;
-    }
-
-    private string GetSQLColNames()
-    {
-        var columns = new List<string> { "[Snapshot]" };
-        foreach (var fn in FNDictionary)
-        {
-            columns.Add($"[{fn.Key.Replace("]", "]]")}]");
-        }
-
-        return $"({string.Join(", ", columns)})";
     }
 
     private async Task<DateTime?> GetLastSyncDateAsync()

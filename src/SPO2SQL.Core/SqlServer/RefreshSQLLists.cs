@@ -104,6 +104,7 @@ internal sealed class RefreshSQLLists
                 List = spoList,
                 DailyMode = daily,
                 CommandTimeoutSeconds = settings.CommandTimeoutSeconds,
+                BatchSize = settings.BatchSize,
                 CancellationToken = cancellationToken
             };
 

@@ -69,6 +69,14 @@ public sealed class Application : BackgroundService
             SyncSettings settings = BuildSyncSettings();
             ConfigureLegacyBridge(settings);
 
+            if (!settings.HasAppOnlyAuth)
+            {
+                _logger.LogWarning(
+                    "Using legacy username/password authentication. Configure TenantId, ClientId and " +
+                    "CertificatePath for app-only authentication, which is required by MFA/Azure AD " +
+                    "Conditional Access policies.");
+            }
+
             if (_appOptions.EnableHealthChecks)
             {
                 await PerformHealthChecksAsync(settings, stoppingToken).ConfigureAwait(false);

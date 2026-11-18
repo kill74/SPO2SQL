@@ -49,6 +49,20 @@ public class SharePointOptionsTests
     }
 
     [Fact]
+    public void Validate_WithHttpSiteUrl_ReturnsError()
+    {
+        var options = new SharePointOptions
+        {
+            SiteUrl = "http://contoso.sharepoint.com",
+            Username = "user@contoso.com",
+            Password = "secret"
+        };
+
+        Validate(options).Should().Contain(result =>
+            result.ErrorMessage == "SharePoint site URL must use HTTPS.");
+    }
+
+    [Fact]
     public void Validate_WithoutAnyAuthenticationMode_ReturnsError()
     {
         var options = new SharePointOptions

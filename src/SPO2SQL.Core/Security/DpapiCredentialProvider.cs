@@ -1,5 +1,7 @@
 using System.Runtime.Versioning;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 
@@ -64,5 +66,33 @@ public class DpapiCredentialProvider : ICredentialProvider
         byte[] encrypted = ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser);
 
         File.WriteAllBytes(FilePath, encrypted);
+        RestrictToCurrentUser(FilePath);
+    }
+
+    /// <summary>
+    /// DPAPI protects the contents, but the file itself should not be readable by
+    /// other local accounts. Explicitly replace inherited ACLs with current-user-only access.
+    /// </summary>
+    private static void RestrictToCurrentUser(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        WindowsIdentity? identity = WindowsIdentity.GetCurrent();
+        if (identity.User == null)
+        {
+            throw new InvalidOperationException("Could not determine the current Windows identity.");
+        }
+
+        var security = new FileSecurity();
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        security.AddAccessRule(new FileSystemAccessRule(
+            identity.User,
+            FileSystemRights.FullControl,
+            AccessControlType.Allow));
+
+        new FileInfo(path).SetAccessControl(security);
     }
 }
