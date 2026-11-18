@@ -7,6 +7,11 @@ internal sealed class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        if (args.Any(a => string.Equals(a, "--setup-secrets", StringComparison.OrdinalIgnoreCase)))
+        {
+            return CredentialSetup.Run();
+        }
+
         try
         {
             var builder = CreateHostBuilder(args);
@@ -85,7 +90,6 @@ internal sealed class Program
                     .ValidateOnStart();
 
                 services.AddSingleton<SyncExitCode>();
-                services.AddHttpClient();
                 services.AddHostedService<Application>();
             });
 }

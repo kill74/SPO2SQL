@@ -10,7 +10,6 @@ public sealed class Application : BackgroundService
     private readonly ILogger<Application> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IHostApplicationLifetime _lifetime;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly SyncExitCode _exitCode;
 
     private readonly ApplicationOptions _appOptions;
@@ -21,7 +20,6 @@ public sealed class Application : BackgroundService
         ILogger<Application> logger,
         ILoggerFactory loggerFactory,
         IHostApplicationLifetime lifetime,
-        IHttpClientFactory httpClientFactory,
         SyncExitCode exitCode,
         IOptions<ApplicationOptions> appOptions,
         IOptions<SharePointOptions> sharePointOptions,
@@ -30,7 +28,6 @@ public sealed class Application : BackgroundService
         _logger = logger;
         _loggerFactory = loggerFactory;
         _lifetime = lifetime;
-        _httpClientFactory = httpClientFactory;
         _exitCode = exitCode;
 
         _appOptions = appOptions.Value;
@@ -63,18 +60,23 @@ public sealed class Application : BackgroundService
         {
             _logger.LogInformation("Starting SharePoint to SQL synchronization...");
 
-            ConfigureLegacyBridge();
+            SyncSettings settings = BuildSyncSettings();
+            ConfigureLegacyBridge(settings);
 
             if (_appOptions.EnableHealthChecks)
             {
-                await PerformHealthChecksAsync(stoppingToken).ConfigureAwait(false);
+                await PerformHealthChecksAsync(settings, stoppingToken).ConfigureAwait(false);
             }
 
-            _logger.LogInformation("Sync configuration: DailyMode={DailyMode}, BatchSize={BatchSize}",
-                _appOptions.DailyMode, _sqlOptions.BatchSize);
+            _logger.LogInformation("Sync configuration: DailyMode={DailyMode}, BatchSize={BatchSize}, Auth={AuthMode}, Metrics={EnableMetrics}",
+                _appOptions.DailyMode,
+                settings.BatchSize,
+                settings.HasAppOnlyAuth ? "app-only" : "username/password",
+                settings.EnableMetrics);
 
             await Task.Run(
                 () => RefreshSQLLists.SPOtoSQLUpdate(
+                    settings: settings,
                     daily: _appOptions.DailyMode,
                     cancellationToken: stoppingToken),
                 stoppingToken).ConfigureAwait(false);
@@ -121,16 +123,34 @@ public sealed class Application : BackgroundService
         _logger.LogInformation("═══════════════════════════════════════════════════════════");
     }
 
-    private void ConfigureLegacyBridge()
+    private SyncSettings BuildSyncSettings() => new()
+    {
+        Username = _sharePointOptions.Username,
+        Password = _sharePointOptions.Password,
+        SiteUrl = _sharePointOptions.SiteUrl,
+        SqlConnectionString = _sqlOptions.ConnectionString,
+        TenantId = _sharePointOptions.TenantId,
+        ClientId = _sharePointOptions.ClientId,
+        CertificatePath = _sharePointOptions.CertificatePath,
+        CertificatePassword = _sharePointOptions.CertificatePassword,
+        CommandTimeoutSeconds = _sqlOptions.CommandTimeoutSeconds,
+        BatchSize = _sqlOptions.BatchSize,
+        MaxRetries = _sharePointOptions.MaxRetries,
+        InitialRetryDelayMs = _sharePointOptions.InitialRetryDelayMs,
+        EnableMetrics = _appOptions.EnableMetrics,
+        LegacyConfigPath = _appOptions.LegacyConfigPath
+    };
+
+    private void ConfigureLegacyBridge(SyncSettings settings)
     {
         CredentialManager.RegisterFallbackProvider(
             new StaticCredentialProvider(
-                _sharePointOptions.Username,
-                _sharePointOptions.Password,
-                _sqlOptions.ConnectionString));
-        XmlConfig.ConfigurationReader.SetSharePointBaseUrl(_sharePointOptions.SiteUrl);
+                settings.Username,
+                settings.Password,
+                settings.SqlConnectionString));
+        XmlConfig.ConfigurationReader.SetSharePointBaseUrl(settings.SiteUrl);
 
-        string configPath = _appOptions.LegacyConfigPath ?? "";
+        string configPath = settings.LegacyConfigPath ?? "";
         if (!Path.IsPathRooted(configPath))
         {
             configPath = Path.Combine(AppContext.BaseDirectory, configPath);
@@ -147,33 +167,41 @@ public sealed class Application : BackgroundService
         }
     }
 
-    private async Task PerformHealthChecksAsync(CancellationToken cancellationToken)
+    private async Task PerformHealthChecksAsync(SyncSettings settings, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Performing startup health checks...");
 
+        ValidateSqlEncryption();
+
         try
         {
-            using var httpClient = _httpClientFactory.CreateClient();
-            httpClient.Timeout = TimeSpan.FromSeconds(_sharePointOptions.TimeoutSeconds);
+            using var spoUser = SPOUserFactory.Create(settings);
+            var checker = new HealthChecker();
 
-            using var response = await httpClient.GetAsync(_sharePointOptions.SiteUrl, cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("SharePoint URL health check: {StatusCode}", response.StatusCode);
+            var result = await Task.Run(
+                () => checker.PerformHealthCheck(spoUser, settings.SiteUrl, settings.SqlConnectionString),
+                cancellationToken).ConfigureAwait(false);
+
+            foreach (string warning in result.Warnings)
+            {
+                _logger.LogWarning("{HealthMessage}", warning);
+            }
+
+            foreach (string error in result.Errors)
+            {
+                _logger.LogError("{HealthMessage}", error);
+            }
+
+            if (!result.IsHealthy)
+            {
+                throw new InvalidOperationException(
+                    "Startup health checks failed: " + string.Join("; ", result.Errors));
+            }
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "SharePoint URL health check failed (this may be expected if authentication is required)");
-        }
-
-        if (!HasServerKeyword(_sqlOptions.ConnectionString))
-        {
-            _logger.LogWarning("SQL connection string does not contain a server keyword (Server=/Data Source=) - verify configuration");
-        }
-
-        ValidateSqlEncryption();
 
         _logger.LogInformation("Health checks completed");
     }
@@ -211,20 +239,6 @@ public sealed class Application : BackgroundService
         }
 
         return value[..visibleChars] + new string('*', value.Length - visibleChars);
-    }
-
-    private static bool HasServerKeyword(string connectionString)
-    {
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return false;
-        }
-
-        var match = System.Text.RegularExpressions.Regex.Match(
-            connectionString,
-            @"(?:Server|Data\s*Source|Address|Addr|Network\s*Address)\s*=",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return match.Success;
     }
 
     private static string MaskConnectionString(string connectionString)

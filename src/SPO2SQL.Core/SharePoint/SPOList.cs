@@ -12,9 +12,12 @@ public class SPOList : Context
 {
     private static readonly string[] s_nullArray = ["NULL"];
 
-    private const int DefaultPageSize = 500;
-
     private List _list;
+
+    /// <summary>
+    /// Number of SharePoint items requested per page. Bound to Sql:BatchSize.
+    /// </summary>
+    public int PageSize { get; set; } = 500;
 
     public string Name { get; set; }
 
@@ -44,7 +47,7 @@ public class SPOList : Context
             }
 
             CamlQuery camlQuery = string.IsNullOrEmpty(CAMLQuery)
-                ? CamlQuery.CreateAllItemsQuery(DefaultPageSize)
+                ? CamlQuery.CreateAllItemsQuery(PageSize)
                 : new CamlQuery { ViewXml = CAMLQuery };
 
             _list = web.Lists.GetByTitle(Name);

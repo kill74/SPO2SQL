@@ -185,103 +185,18 @@ public static class ConfigurationReader
         }
     }
 
-    public static (string Username, string Password) GetSharePointCredentials()
-    {
-        try
-        {
-            return CredentialManager.GetSharePointCredentials();
-        }
-        catch
-        {
-        }
+    /// <summary>
+    /// Credentials come exclusively from the credential provider chain. The legacy
+    /// XML file is used only for list mappings; it is no longer a secret store.
+    /// </summary>
+    public static (string Username, string Password) GetSharePointCredentials() =>
+        CredentialManager.GetSharePointCredentials();
 
-        LoadConfig();
-        try
-        {
-            var spNode = _xmlDoc.SelectSingleNode("//Configuration/SharePoint");
-            if (spNode == null)
-            {
-                throw new InvalidOperationException("SharePoint configuration section not found.");
-            }
-
-            var usernameNode = spNode.SelectSingleNode("Username");
-            var passwordNode = spNode.SelectSingleNode("Password");
-
-            if (usernameNode == null)
-            {
-                throw new InvalidOperationException("Username element not found in SharePoint configuration.");
-            }
-
-            if (passwordNode == null)
-            {
-                throw new InvalidOperationException("Password element not found in SharePoint configuration.");
-            }
-
-            var username = usernameNode.InnerText.Trim();
-            var password = passwordNode.InnerText.Trim();
-
-            if (string.IsNullOrEmpty(username))
-            {
-                throw new InvalidOperationException("Username cannot be empty.");
-            }
-
-            if (string.IsNullOrEmpty(password))
-            {
-                throw new InvalidOperationException("Password cannot be empty.");
-            }
-
-            Logger.Log(2, "SharePoint credentials retrieved successfully from XML config.");
-            return (username, password);
-        }
-        catch (InvalidOperationException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Error retrieving SharePoint credentials: " + ex.Message);
-            throw new InvalidOperationException("Failed to retrieve SharePoint credentials.", ex);
-        }
-    }
-
-    public static string GetSqlConnectionString()
-    {
-        try
-        {
-            return CredentialManager.GetSqlConnectionString();
-        }
-        catch
-        {
-        }
-
-        LoadConfig();
-        try
-        {
-            var connNode = _xmlDoc.SelectSingleNode("//Configuration/SQL/ConnectionString");
-            if (connNode == null)
-            {
-                throw new InvalidOperationException("SQL ConnectionString element not found in configuration.");
-            }
-
-            string connectionString = connNode.InnerText.Trim();
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                throw new InvalidOperationException("SQL connection string cannot be empty.");
-            }
-
-            Logger.Log(2, "SQL connection string retrieved successfully from XML config.");
-            return connectionString;
-        }
-        catch (InvalidOperationException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Error retrieving SQL connection string: " + ex.Message);
-            throw new InvalidOperationException("Failed to retrieve SQL connection string.", ex);
-        }
-    }
+    /// <summary>
+    /// The SQL connection string comes exclusively from the credential provider chain.
+    /// </summary>
+    public static string GetSqlConnectionString() =>
+        CredentialManager.GetSqlConnectionString();
 
     public static bool IsTwoFactorEnabled()
     {

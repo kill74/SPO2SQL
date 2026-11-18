@@ -53,7 +53,9 @@ docs/                   Configuration, security, modernization, and operational 
 - SQL Server access with permission to read source metadata and create/update destination tables
 - A SharePoint account or supported application identity configured for the target tenant
 
-The current authentication path uses username/password token acquisition. Environments requiring interactive MFA or Conditional Access should use an app-only/service-principal authentication design instead of relying on password-based authentication.
+Two authentication modes are supported. For unattended jobs, configure app-only authentication by setting `SharePoint:TenantId`, `SharePoint:ClientId` and `SharePoint:CertificatePath` (plus `CertificatePassword` when the PFX is protected); this uses client credentials with a certificate and is not blocked by MFA or Conditional Access. When those values are absent, the legacy username/password flow is used as a fallback, which will fail in tenants that enforce MFA.
+
+Run `dotnet run -- --setup-secrets` to store credentials in the current user's DPAPI-protected store (Windows only).
 
 ## Build and test
 
@@ -98,7 +100,11 @@ The console application binds these sections:
     "Password": "",
     "TimeoutSeconds": 120,
     "MaxRetries": 3,
-    "InitialRetryDelayMs": 1000
+    "InitialRetryDelayMs": 1000,
+    "TenantId": "",
+    "ClientId": "",
+    "CertificatePath": "",
+    "CertificatePassword": ""
   },
   "Sql": {
     "ConnectionString": "Server=.;Database=SPO2SQL;Integrated Security=true;Encrypt=true;TrustServerCertificate=false;",
