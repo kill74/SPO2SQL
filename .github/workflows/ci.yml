@@ -12,8 +12,12 @@ env:
 
 jobs:
   build:
-    name: Build & Test
-    runs-on: windows-latest
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
     timeout-minutes: 15
 
     steps:
@@ -54,4 +58,4 @@ jobs:
           retention-days: 14
 
       - name: Audit NuGet packages
-        run: dotnet nuget audit
+        run: dotnet restore --force /p:NuGetAudit=true /p:NuGetAuditMode=all /p:NuGetAuditLevel=moderate

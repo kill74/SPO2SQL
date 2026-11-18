@@ -25,6 +25,13 @@ internal static class CredentialSetup
 
         try
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                Console.WriteLine("ERROR: DPAPI encryption is not available on this platform.");
+                Console.WriteLine("Use environment variables or user secrets instead.");
+                return 1;
+            }
+
             DpapiCredentialProvider.SaveCredentials(username, password, connectionString ?? string.Empty);
             Console.WriteLine("Credentials saved securely.");
             return 0;

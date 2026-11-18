@@ -1,4 +1,3 @@
-using System;
 using Microsoft.SharePoint.Client;
 using SPO2SQL.Logging;
 
@@ -19,7 +18,7 @@ internal sealed class TimesheetDQ : DataQualityBase
     {
     }
 
-    public override bool Execute()
+    public override async Task<bool> ExecuteAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -32,7 +31,8 @@ internal sealed class TimesheetDQ : DataQualityBase
                 "</IsNull></Where></Query>" +
                 "</View>";
 
-            using var timesheetList = CreateAndBuildList(TIMESHEET_LIST, TIMESHEET_SITE, camlQuery);
+            using var timesheetList = await CreateAndBuildListAsync(TIMESHEET_LIST, TIMESHEET_SITE, camlQuery, cancellationToken)
+                .ConfigureAwait(false);
 
             if (timesheetList.ItemCollection.Count == 0)
             {
@@ -40,11 +40,11 @@ internal sealed class TimesheetDQ : DataQualityBase
                 return true;
             }
 
-            ProcessListItemsInBatches(timesheetList, item =>
+            await ProcessListItemsInBatchesAsync(timesheetList, async item =>
             {
                 try
                 {
-                    var unitRecord = GetUnitItem(item);
+                    var unitRecord = await GetUnitItemAsync(item, cancellationToken).ConfigureAwait(false);
                     if (unitRecord != null && unitRecord[MAIN_APPROVER_FIELD] != null)
                     {
                         SetFieldValue(item, MAIN_APPROVER_FIELD, unitRecord[MAIN_APPROVER_FIELD]);
@@ -56,7 +56,7 @@ internal sealed class TimesheetDQ : DataQualityBase
                     }
                     else
                     {
-                        var structureApprover = GetStructureApprover(item);
+                        var structureApprover = await GetStructureApproverAsync(item, cancellationToken).ConfigureAwait(false);
                         if (structureApprover != null)
                         {
                             SetFieldValue(item, MAIN_APPROVER_FIELD, structureApprover);
@@ -67,9 +67,9 @@ internal sealed class TimesheetDQ : DataQualityBase
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogError($"Error processing Timesheet item ID {item.Id}: {ex.Message}");
+                    Logger.LogError($"Error processing Timesheet item ID {item.Id}", ex);
                 }
-            });
+            }, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             Logger.LogWarning("Completed Timesheet approver backfill operation");
             return true;
@@ -81,7 +81,7 @@ internal sealed class TimesheetDQ : DataQualityBase
         }
     }
 
-    private ListItem GetUnitItem(ListItem item)
+    private async Task<ListItem?> GetUnitItemAsync(ListItem item, CancellationToken cancellationToken)
     {
         try
         {
@@ -99,7 +99,8 @@ internal sealed class TimesheetDQ : DataQualityBase
                 "</And></Where></Query>" +
                 "</View>";
 
-            using var unitList = CreateAndBuildList(UNIT_LIST, UNIT_SITE, camlUnitQuery);
+            using var unitList = await CreateAndBuildListAsync(UNIT_LIST, UNIT_SITE, camlUnitQuery, cancellationToken)
+                .ConfigureAwait(false);
             return unitList.ItemCollection.Count > 0 ? unitList.ItemCollection[0] : null;
         }
         catch (Exception ex)
@@ -109,7 +110,7 @@ internal sealed class TimesheetDQ : DataQualityBase
         }
     }
 
-    private FieldUserValue GetStructureApprover(ListItem item)
+    private async Task<FieldUserValue?> GetStructureApproverAsync(ListItem item, CancellationToken cancellationToken)
     {
         try
         {
@@ -127,13 +128,11 @@ internal sealed class TimesheetDQ : DataQualityBase
                 "</Where></Query>" +
                 "</View>";
 
-            using var hrList = CreateAndBuildList(HR_LIST, HR_SITE, camlPersonQuery);
-            if (hrList.ItemCollection.Count > 0)
-            {
-                return GetFieldValue<FieldUserValue>(hrList.ItemCollection[0], "Approver1");
-            }
-
-            return null;
+            using var hrList = await CreateAndBuildListAsync(HR_LIST, HR_SITE, camlPersonQuery, cancellationToken)
+                .ConfigureAwait(false);
+            return hrList.ItemCollection.Count > 0
+                ? GetFieldValue<FieldUserValue>(hrList.ItemCollection[0], "Approver1")
+                : null;
         }
         catch (Exception ex)
         {

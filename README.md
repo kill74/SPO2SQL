@@ -14,7 +14,7 @@
 - Per-list column mapping, destination names, data types, and ignore rules.
 - Retry handling for transient SharePoint and network failures.
 - Startup health checks for SharePoint and SQL connectivity.
-- Operation statistics, structured logging, and cancellation support.
+- End-to-end async I/O with cancellation, per-list operation statistics and structured logging.
 - Credential providers for environment variables, Windows DPAPI, and application configuration.
 - Automated build, test, formatting, dependency-audit, and CodeQL workflows.
 
@@ -166,7 +166,7 @@ The detailed security guidance is available in [`docs/SECURITY.md`](docs/SECURIT
 
 ## CI/CD
 
-GitHub Actions runs on pushes and pull requests:
+GitHub Actions runs on pushes and pull requests on both Linux and Windows:
 
 1. Restore NuGet dependencies.
 2. Build with warnings treated as errors.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace SPO2SQL.SharePoint;
@@ -54,8 +55,8 @@ public static class CamlQueryBuilder
             throw new ArgumentException("'to' date must be greater than or equal to 'from' date.");
         }
 
-        var fromValue = EscapeXmlValue(from.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"));
-        var toValue = EscapeXmlValue(to.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"));
+        var fromValue = EscapeXmlValue(from.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
+        var toValue = EscapeXmlValue(to.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));
 
         return $@"<View>
     <Query>
@@ -129,7 +130,7 @@ public static class CamlQueryBuilder
         <Where>
             <Eq>
                 <FieldRef Name='{EscapeXmlValue(fieldName)}' />
-                <Value Type='Number'>{EscapeXmlValue(value.ToString())}</Value>
+                <Value Type='Number'>{EscapeXmlValue(value.ToString(CultureInfo.InvariantCulture))}</Value>
             </Eq>
         </Where>
     </Query>

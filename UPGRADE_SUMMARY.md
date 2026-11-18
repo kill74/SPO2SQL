@@ -181,13 +181,17 @@ Logger (Enhanced)
 
 ---
 
-## Future Improvements
+## Status of Previously Planned Improvements
 
-- [ ] Add async/await support for SharePoint operations
-- [ ] Implement connection pooling for SQL Server
-- [ ] Add retry logic with exponential backoff
-- [ ] Create configuration service layer
-- [ ] Add metrics/performance monitoring
-- [ ] Implement proper dependency injection
-- [ ] Add unit test suite
-- [ ] Add telemetry for debugging
+This summary describes an earlier modernization pass. The items below were
+subsequently delivered in the current codebase (see `docs/PROGRESS.md`):
+
+- [x] Async/await for SharePoint and SQL operations, with cancellation
+- [x] Retry logic with exponential backoff and jitter (`RetryPolicy`)
+- [x] Configuration service layer (`SyncSettings` plus validated options)
+- [x] Per-list metrics logging via `OperationStatistics`
+- [x] Dependency injection in the .NET host
+- [x] Unit test suite across both projects
+- [x] App-only authentication, real health checks and warning-free nullable build
+
+Still open: OpenTelemetry export and live integration tests.
