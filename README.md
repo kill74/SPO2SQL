@@ -1,87 +1,118 @@
 # SPO2SQL
 
-[![Build and test](https://github.com/kill74/SPO2SQL/actions/workflows/ci.yml/badge.svg)](https://github.com/kill74/SPO2SQL/actions/workflows/ci.yml)
+[![CI](https://github.com/kill74/SPO2SQL/actions/workflows/ci.yml/badge.svg)](https://github.com/kill74/SPO2SQL/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/kill74/SPO2SQL/actions/workflows/codeql.yml/badge.svg)](https://github.com/kill74/SPO2SQL/actions/workflows/codeql.yml)
 [![.NET 8](https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**SPO2SQL** is a .NET 8 synchronization service that transfers SharePoint Online list data into SQL Server tables and applies data-quality routines during the process. It is designed for repeatable scheduled execution, explicit configuration, resilient network operations, and safe schema evolution.
+**SPO2SQL** is a .NET 8 console service that replicates SharePoint Online list data into SQL Server tables. It is built for unattended, scheduled execution: configuration is validated at startup, I/O is asynchronous and cancellation-aware, and failures are reflected in the process exit code.
 
-## What it provides
+---
 
-- SharePoint Online access through CSOM and Microsoft identity authentication.
-- Full and incremental synchronization modes.
-- SQL table creation and additive column discovery.
-- Per-list column mapping, destination names, data types, and ignore rules.
-- Retry handling for transient SharePoint and network failures.
-- Startup health checks for SharePoint and SQL connectivity.
-- End-to-end async I/O with cancellation, per-list operation statistics and structured logging.
-- Credential providers for environment variables, Windows DPAPI, and application configuration.
-- Automated build, test, formatting, dependency-audit, and CodeQL workflows.
+## Capabilities
 
-## Repository layout
+- **Full and incremental sync** — a persisted UTC watermark drives `Modified >= lastSync` queries on subsequent runs.
+- **Safe schema evolution** — destination tables are created on first run and extended additively when new source columns appear; no destructive DDL.
+- **Explicit mappings** — per-list and per-column rules for inclusion, exclusion, destination names and SQL types, sourced from a legacy XML file.
+- **Resilience** — transient SharePoint/network failures are retried with exponential backoff and jitter; a cancelled run rolls back cleanly.
+- **Transactional writes** — SharePoint data is read and transformed before a SQL transaction is opened, so no locks are held during network calls.
+- **App-only authentication** — certificate-based client credentials work under MFA and Conditional Access; username/password remains a legacy fallback.
+- **Startup health checks** — authenticated SharePoint connectivity and a real SQL connection are verified before any sync starts.
+- **Observability** — structured logging across host and core, plus optional per-list statistics (items, successes, failures, duration, throughput).
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Host / Program.cs] --> B[Options validation<br/>IOptions&lt;T&gt;]
+    B --> C[SyncSettings<br/>immutable snapshot]
+    C --> D[Application<br/>BackgroundService]
+    D --> E[HealthChecker]
+    D --> F[RefreshSQLLists]
+    F --> G[SPOUser<br/>MSAL auth]
+    F --> H[SPOList<br/>paged CSOM reads]
+    F --> I[SQLInteraction<br/>DDL + transactional load]
+    H --> I
+    I --> J[(SQL Server)]
+```
+
+The console host owns configuration, dependency injection, logging and exit-status policy. `SPO2SQL.Core` owns all SharePoint, SQL, credential and mapping logic and receives a single `SyncSettings` record — it never reads global configuration itself.
+
+### Repository layout
 
 ```text
 src/
-├── SPO2SQL.Core/       SharePoint, SQL Server, security, configuration, and DQ logic
-└── SPO2SQL.Console/    .NET host, options binding, startup, and orchestration
-
+  SPO2SQL.Console/             Host, options, startup, health checks, CLI setup
+  SPO2SQL.Core/
+    Configuration/             SyncSettings passed through the sync pipeline
+    Security/                  Credential provider chain (env, DPAPI, configured values)
+    SharePoint/                Auth, paged list access, retry, CAML, health checks, DQ
+    SqlServer/                 Table management and transactional data transfer
+    XmlConfig/                 Legacy list/column mapping reader
 tests/
-├── SPO2SQL.Core.Tests/     Core unit tests
-└── SPO2SQL.Console.Tests/  Configuration and host-facing tests
-
-docs/                   Configuration, security, modernization, and operational notes
+  SPO2SQL.Core.Tests/          Core unit tests
+  SPO2SQL.Console.Tests/       Options, validation and exit-code tests
+docs/                          Configuration, security and modernization notes
+SPOtoSQL-Snapshots/            Historical .NET Framework source (reference only)
 ```
 
-### Core components
+### Key dependencies
 
-| Component | Responsibility |
+| Concern | Library |
 | --- | --- |
-| `SPO2SQL.Console.Application` | Starts the hosted application and coordinates health checks and synchronization |
-| `RefreshSQLLists` | Orchestrates SharePoint-to-SQL transfers for configured lists |
-| `SPOList` / `SPOUser` | Manages SharePoint list access and authentication |
-| `SQLInteraction` | Creates or updates destination tables and transfers list items |
-| `RetryPolicy` | Retries transient failures with exponential backoff and jitter |
-| `HealthChecker` | Validates SharePoint and SQL connectivity |
-| `CamlQueryBuilder` | Generates escaped CAML queries |
-| `CredentialManager` | Resolves credentials through ordered providers |
-| `ActivitiesDQ`, `InvoiceRequestDQ`, `TimesheetDQ` | List-specific data-quality processing |
+| SharePoint access | `Microsoft.SharePointOnline.CSOM` |
+| Authentication | `Microsoft.Identity.Client` (MSAL) |
+| SQL access | `Microsoft.Data.SqlClient` |
+| Hosting / options / logging | `Microsoft.Extensions.*` 8.0 |
+| Windows credential store | `System.Security.Cryptography.ProtectedData` |
+| Testing | xUnit, FluentAssertions, NSubstitute, coverlet |
 
-## Requirements
+---
 
-- .NET SDK 8.0 or later
-- Network access to SharePoint Online over HTTPS
-- SQL Server access with permission to read source metadata and create/update destination tables
-- A SharePoint account or supported application identity configured for the target tenant
+## Getting started
 
-Two authentication modes are supported. For unattended jobs, configure app-only authentication by setting `SharePoint:TenantId`, `SharePoint:ClientId` and `SharePoint:CertificatePath` (plus `CertificatePassword` when the PFX is protected); this uses client credentials with a certificate and is not blocked by MFA or Conditional Access. When those values are absent, the legacy username/password flow is used as a fallback, which will fail in tenants that enforce MFA.
+### Prerequisites
 
-Run `dotnet run -- --setup-secrets` to store credentials in the current user's DPAPI-protected store (Windows only).
+- .NET SDK 8.0 (the repository pins the 8.0 SDK band via `global.json`)
+- Network access to the target SharePoint Online site
+- SQL Server access with `CREATE TABLE` / `ALTER` rights on the destination database
+- An app registration with SharePoint application permissions (recommended), or a legacy user account
 
-## Build and test
+### Build and test
 
 ```bash
 dotnet restore SPO2SQL.sln
 dotnet build SPO2SQL.sln --no-restore -warnaserror
 dotnet test SPO2SQL.sln --no-build --no-restore
-```
-
-For CI-equivalent formatting validation:
-
-```bash
 dotnet format SPO2SQL.sln --verify-no-changes --no-restore
 ```
 
-Run the console host with:
+Warnings are treated as errors and nullable reference types are enforced without blanket suppressions.
+
+### Run
 
 ```bash
 dotnet run --project src/SPO2SQL.Console/SPO2SQL.Console.csproj
 ```
 
-The synchronization mode is controlled by `Application:DailyMode`. Set it to `true` for incremental synchronization or `false` for a current-time/full transfer.
+`Application:DailyMode` selects the mode: `true` for incremental sync, `false` for a full current-time transfer. The process returns `0` on success and `1` on validation, health-check or synchronization failure.
+
+---
 
 ## Configuration
 
-The console application binds these sections:
+Configuration is resolved in this order (later sources win):
+
+1. `appsettings.json`
+2. `appsettings.{Environment}.json`
+3. .NET user secrets
+4. Environment variables
+5. Environment variables prefixed with `SPO2SQL_`
+6. Command-line arguments
+
+Example:
 
 ```json
 {
@@ -96,18 +127,18 @@ The console application binds these sections:
   },
   "SharePoint": {
     "SiteUrl": "https://contoso.sharepoint.com/sites/example",
-    "Username": "user@contoso.com",
+    "Username": "",
     "Password": "",
     "TimeoutSeconds": 120,
     "MaxRetries": 3,
     "InitialRetryDelayMs": 1000,
-    "TenantId": "",
-    "ClientId": "",
-    "CertificatePath": "",
+    "TenantId": "00000000-0000-0000-0000-000000000000",
+    "ClientId": "00000000-0000-0000-0000-000000000000",
+    "CertificatePath": "/secure/spo2sql.pfx",
     "CertificatePassword": ""
   },
   "Sql": {
-    "ConnectionString": "Server=.;Database=SPO2SQL;Integrated Security=true;Encrypt=true;TrustServerCertificate=false;",
+    "ConnectionString": "Server=sql01;Database=SPO2SQL;Encrypt=true;TrustServerCertificate=false;Integrated Security=true;",
     "CommandTimeoutSeconds": 300,
     "BatchSize": 80,
     "EnforceEncryption": true
@@ -115,84 +146,96 @@ The console application binds these sections:
 }
 ```
 
-Do not commit passwords or connection strings. Use user secrets for development and environment variables or a managed secret store in production.
-
-### Configuration precedence
-
-The host loads configuration in this order, with later sources taking precedence:
-
-1. `appsettings.json`
-2. `appsettings.{Environment}.json`
-3. .NET user secrets
-4. Environment variables
-5. Environment variables prefixed with `SPO2SQL_`
-6. Command-line configuration
-
-Environment variables use double underscores for nested keys:
+Supply secrets outside source control. For local development:
 
 ```bash
-export SPO2SQL_SharePoint__Username="user@contoso.com"
-export SPO2SQL_SharePoint__Password="use-a-secret-store"
-export SPO2SQL_SharePoint__SiteUrl="https://contoso.sharepoint.com/sites/example"
-export SPO2SQL_Sql__ConnectionString="Server=sql01;Database=SPO2SQL;Integrated Security=true;Encrypt=true;TrustServerCertificate=false;"
+dotnet user-secrets set "Sql:ConnectionString" "Server=...;Encrypt=true;" --project src/SPO2SQL.Console
 ```
 
-The bound options are bridged into the legacy synchronization layer at startup. `LegacyConfigPath` remains available for list mappings and older deployments; a missing legacy XML file is reported as a warning rather than a build-time failure.
+For scheduled jobs:
 
-## SharePoint list mappings
+```bash
+export SPO2SQL_SharePoint__TenantId="..."
+export SPO2SQL_SharePoint__ClientId="..."
+export SPO2SQL_SharePoint__CertificatePath="/secure/spo2sql.pfx"
+export SPO2SQL_Sql__ConnectionString="Server=...;Encrypt=true;TrustServerCertificate=false;"
+```
 
-Legacy XML configuration supports per-list and per-column rules, including:
+On Windows, `dotnet run --project src/SPO2SQL.Console -- --setup-secrets` stores username, password and connection string in the current user's DPAPI-protected store. The legacy environment names `SPO_USERNAME`, `SPO_PASSWORD` and `SQL_CONNECTION_STRING` are also honoured by the credential provider chain.
 
-- SharePoint site/list selection
-- SQL destination table names
-- Column inclusion and exclusion
-- Destination column names
-- Explicit SQL data types
-- List-level ignore rules
+### List mappings
 
-Keep deployment-specific XML outside source control when it contains credentials or internal infrastructure details. See [`docs/Configuration/README.md`](docs/Configuration/README.md) and [`docs/Configuration/MIGRATION_GUIDE.md`](docs/Configuration/MIGRATION_GUIDE.md).
+List and column mappings still come from the XML file referenced by `Application:LegacyConfigPath`. It defines which lists are processed, their site-relative paths, destination names and column rules. The file must exist at runtime; a missing file causes an explicit configuration error. Keep deployment-specific XML outside source control when it contains infrastructure details. See [`docs/Configuration/README.md`](docs/Configuration/README.md).
 
-## Security and operations
+---
 
-- Use least-privilege SharePoint and SQL identities.
-- Require encrypted SQL connections in production.
-- Never log passwords, access tokens, or complete connection strings.
-- Prefer environment-backed or managed secret storage over files.
-- Rotate credentials without modifying application binaries.
-- Monitor authentication failures, retry exhaustion, schema changes, and synchronization statistics.
-- Use cancellation-aware shutdowns for scheduled jobs and deployment rollouts.
+## Authentication
 
-The detailed security guidance is available in [`docs/SECURITY.md`](docs/SECURITY.md).
+| Mode | When to use | Configuration |
+| --- | --- | --- |
+| **App-only (recommended)** | Unattended jobs, MFA/Conditional Access tenants | `TenantId`, `ClientId`, `CertificatePath` (and optionally `CertificatePassword`) |
+| Username/password (ROPC) | Legacy tenants only; blocked by MFA | `Username`, `Password` |
+
+At least one complete mode must be configured — startup validation fails otherwise. The app-only scope is `{scheme}://{host}/.default` for the configured site. Tokens are cached per site and renewed before expiry; token acquisition is serialized to avoid races across concurrent requests.
+
+SQL encryption is enforced by default: `Encrypt=true` and `TrustServerCertificate=false` are required unless `Sql:EnforceEncryption` is explicitly disabled.
+
+---
+
+## Synchronization behaviour
+
+- Lists are read with explicit paging (`BatchSize` items per page), so large lists are not truncated.
+- On the first run all items are read; the UTC watermark captured before the read is persisted afterwards. Items modified during a run are therefore picked up by the next incremental run.
+- Failures in individual inserts are aggregated; the transaction is rolled back rather than leaving a partially loaded snapshot.
+- Only additive columns are created on existing tables. Existing columns, data types and rows are never altered or removed by the tool.
+- The process stops application startup if health checks report unreachable SharePoint or SQL endpoints.
+
+### Known limitations
+
+- The list-specific data-quality routines in `SPO2SQL.Core/SharePoint` are implemented but are **not yet invoked** by the default orchestration.
+- Metrics are emitted as structured per-list log entries; there is no OpenTelemetry exporter yet.
+- Integration tests against a live tenant and SQL Server are not part of the automated suite.
+
+---
 
 ## CI/CD
 
-GitHub Actions runs on pushes and pull requests on both Linux and Windows:
+GitHub Actions runs on pushes to `main`/`master`/`develop` and on pull requests, on both Ubuntu and Windows:
 
-1. Restore NuGet dependencies.
-2. Build with warnings treated as errors.
-3. Verify formatting.
-4. Run unit tests with coverage collection.
-5. Run the NuGet audit.
+1. Restore (with NuGet audit enabled)
+2. Build with warnings as errors
+3. Formatting verification
+4. Unit tests with coverage upload
+5. NuGet vulnerability audit
 
-CodeQL analysis is configured separately under [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml).
+CodeQL analysis is configured separately. GitLab CI mirrors the build, test, format and audit stages.
 
-## Publishing
+---
 
-Example Windows deployment:
+## Security
+
+- Never commit credentials, certificates or connection strings.
+- Prefer app-only authentication and least-privilege SQL identities.
+- Keep `EnforceEncryption` enabled outside isolated development environments.
+- Environment-backed secrets survive credential rotation without redeploying binaries.
+- Stack traces are logged through the structured logger, not written ad-hoc to stdout.
+
+See [`docs/SECURITY.md`](docs/SECURITY.md) for the full guidance.
+
+---
+
+## Development
+
+Work on feature branches; `master` receives changes through reviewed pull requests. Keep the local validation loop green before opening a PR:
 
 ```bash
-dotnet publish src/SPO2SQL.Console/SPO2SQL.Console.csproj \
-  --configuration Release \
-  --runtime win-x64 \
-  --self-contained false
+dotnet build SPO2SQL.sln -warnaserror
+dotnet test SPO2SQL.sln
+dotnet format SPO2SQL.sln --verify-no-changes
 ```
 
-Published output is written below:
-
-```text
-src/SPO2SQL.Console/bin/Release/net8.0/win-x64/publish/
-```
+---
 
 ## License
 
-This project is licensed under the MIT License.
+MIT.
