@@ -158,6 +158,7 @@ public sealed class Application : BackgroundService
         MaxRetries = _sharePointOptions.MaxRetries,
         InitialRetryDelayMs = _sharePointOptions.InitialRetryDelayMs,
         EnableMetrics = _appOptions.EnableMetrics,
+        MaxParallelLists = _appOptions.MaxParallelLists,
         LegacyConfigPath = _appOptions.LegacyConfigPath
     };
 

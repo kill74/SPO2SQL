@@ -1,5 +1,8 @@
 using Microsoft.Extensions.Options;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
 using SPO2SQL.Configuration;
+using SPO2SQL.Telemetry;
 
 namespace SPO2SQL;
 
@@ -88,6 +91,24 @@ internal sealed class Program
                     .Bind(context.Configuration.GetSection(SqlOptions.SectionName))
                     .ValidateDataAnnotations()
                     .ValidateOnStart();
+
+                if (context.Configuration.GetValue<bool>("Application:EnableMetrics", true))
+                {
+                    services.AddOpenTelemetry()
+                        .WithMetrics(builder =>
+                        {
+                            builder.AddMeter(SyncMetrics.MeterName);
+
+                            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")))
+                            {
+                                builder.AddOtlpExporter();
+                            }
+                            else
+                            {
+                                builder.AddConsoleExporter();
+                            }
+                        });
+                }
 
                 services.AddSingleton<SyncExitCode>();
                 services.AddHostedService<Application>();

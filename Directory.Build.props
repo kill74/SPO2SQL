@@ -15,7 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Explicit patched version: 8.0.0 is affected by GHSA-8g4q-xg66-9fp4 and GHSA-hh2w-p6rv-4g7w. -->
-    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+    <!-- Explicit patched version: 8.0.0 is affected by security advisories. -->
+    <PackageReference Include="System.Text.Json" Version="9.0.23" />
   </ItemGroup>
 </Project>

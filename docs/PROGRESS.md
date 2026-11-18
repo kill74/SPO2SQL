@@ -17,6 +17,8 @@ The .NET 8 rewrite is complete and the legacy .NET Framework snapshot in
 | Real SharePoint/SQL startup health checks | Done |
 | `--setup-secrets` in the real console host | Done |
 | End-to-end async (CSOM, ADO.NET, retries, DQ) | Done |
+| Bulk SQL writes and bounded parallel list processing | Done |
+| OpenTelemetry metrics (`SPO2SQL` meter, console/OTLP exporter) | Done |
 | Nullable reference types enforced without blanket suppressions | Done |
 | CI on Linux and Windows with format and NuGet audit | Done |
 
@@ -36,5 +38,4 @@ logging routing, and exit-code propagation.
 ## Remaining work
 
 - Integration tests against a real SharePoint tenant and SQL Server.
-- Observability export (OpenTelemetry) behind `Application:EnableMetrics`.
 - Replace the in-house `RetryPolicy` with a Polly resilience pipeline.

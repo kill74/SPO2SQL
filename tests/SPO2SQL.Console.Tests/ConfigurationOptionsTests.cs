@@ -16,6 +16,7 @@ public class ApplicationOptionsTests
         options.Environment.Should().Be("Production");
         options.EnableMetrics.Should().BeTrue();
         options.EnableHealthChecks.Should().BeTrue();
+        options.MaxParallelLists.Should().Be(4);
     }
 }
 

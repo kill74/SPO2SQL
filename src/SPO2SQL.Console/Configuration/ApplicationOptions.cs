@@ -23,6 +23,10 @@ public record ApplicationOptions
 
     public bool DailyMode { get; init; } = true;
 
+    /// <summary>Number of lists that may be synchronized concurrently.</summary>
+    [Range(1, 16, ErrorMessage = "MaxParallelLists must be between 1 and 16")]
+    public int MaxParallelLists { get; init; } = 4;
+
     [Required]
     public string LegacyConfigPath { get; init; } = "XmlConfig/UserConfig.xml";
 }

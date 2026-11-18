@@ -33,6 +33,8 @@ public sealed record SyncSettings
 
     public bool EnableMetrics { get; init; }
 
+    public int MaxParallelLists { get; init; } = 4;
+
     public string? LegacyConfigPath { get; init; }
 
     public bool HasAppOnlyAuth =>

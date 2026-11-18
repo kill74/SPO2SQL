@@ -1,6 +1,7 @@
 using SPO2SQL.Configuration;
 using SPO2SQL.Logging;
 using SPO2SQL.SharePoint;
+using SPO2SQL.Telemetry;
 using SPO2SQL.XmlConfig;
 
 namespace SPO2SQL.SqlServer;
@@ -22,25 +23,28 @@ internal sealed class RefreshSQLLists
             using var user = SPOUserFactory.Create(settings);
 
             var listConfigs = ConfigurationReader.GetListConfigurations();
+            var activeLists = listConfigs?
+                .Where(kvp => !kvp.Value.Ignore)
+                .ToArray() ?? [];
+
             int failedLists = 0;
-            if (listConfigs != null)
-            {
-                foreach (var kvp in listConfigs)
+
+            await Parallel.ForEachAsync(
+                activeLists,
+                new ParallelOptions
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
+                    MaxDegreeOfParallelism = Math.Max(1, settings.MaxParallelLists),
+                    CancellationToken = cancellationToken
+                },
+                async (kvp, token) =>
+                {
                     var listName = kvp.Key;
-                    var config = kvp.Value;
-                    if (config.Ignore)
-                    {
-                        continue;
-                    }
-
-                    string ctxURL = config.SharepointList;
+                    string ctxURL = kvp.Value.SharepointList;
                     Logger.Log(1, $"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
+
                     try
                     {
-                        await RefreshListsSQLAsync(listName, ctxURL, settings, user, daily, cancellationToken)
+                        await RefreshListsSQLAsync(listName, ctxURL, settings, user, daily, token)
                             .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
@@ -50,11 +54,10 @@ internal sealed class RefreshSQLLists
                     }
                     catch (Exception ex)
                     {
-                        failedLists++;
+                        Interlocked.Increment(ref failedLists);
                         Logger.LogError($"SPOtoSQLUpdate: Exception while updating list '{listName}'.", ex);
                     }
-                }
-            }
+                }).ConfigureAwait(false);
 
             if (failedLists > 0)
             {
@@ -133,6 +136,7 @@ internal sealed class RefreshSQLLists
             if (settings.EnableMetrics)
             {
                 Logger.LogInformation($"[Metrics] List '{listName}': {statistics}");
+                SyncMetrics.Record(statistics, listName, daily);
             }
 
             Logger.Log(2, $"RefreshListsSQL: Update for list '{listName}' completed.");

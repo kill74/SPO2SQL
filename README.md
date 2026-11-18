@@ -16,9 +16,10 @@
 - **Explicit mappings** — per-list and per-column rules for inclusion, exclusion, destination names and SQL types, sourced from a legacy XML file.
 - **Resilience** — transient SharePoint/network failures are retried with exponential backoff and jitter; a cancelled run rolls back cleanly.
 - **Transactional bulk writes** — SharePoint data is read and transformed before a SQL transaction is opened; rows are then loaded with `SqlBulkCopy` in configurable batches, so no locks are held during network calls and the number of SQL round trips is constant.
+- **Bounded parallelism** — independent lists are synchronized concurrently with `Application:MaxParallelLists` (default 4); failures in one list do not stop the others.
 - **App-only authentication** — certificate-based client credentials work under MFA and Conditional Access; username/password remains a legacy fallback.
 - **Startup health checks** — authenticated SharePoint connectivity and a real SQL connection are verified before any sync starts.
-- **Observability** — structured logging across host and core, plus optional per-list statistics (items, successes, failures, duration, throughput).
+- **Observability** — structured logging plus OpenTelemetry metrics (`spo2sql.lists.synced`, `spo2sql.items.*`, `spo2sql.sync.duration`) tagged by list and sync mode.
 
 ---
 
@@ -65,7 +66,7 @@ SPOtoSQL-Snapshots/            Historical .NET Framework source (reference only)
 | SharePoint access | `Microsoft.SharePointOnline.CSOM` |
 | Authentication | `Microsoft.Identity.Client` (MSAL) |
 | SQL access | `Microsoft.Data.SqlClient` |
-| Hosting / options / logging | `Microsoft.Extensions.*` 8.0 |
+| Hosting / options / logging | `Microsoft.Extensions.*` 9.0 (targets `net8.0`) |
 | Windows credential store | `System.Security.Cryptography.ProtectedData` |
 | Testing | xUnit, FluentAssertions, NSubstitute, coverlet |
 
@@ -123,6 +124,7 @@ Example:
     "EnableHealthChecks": true,
     "EnableMetrics": true,
     "DailyMode": true,
+    "MaxParallelLists": 4,
     "LegacyConfigPath": "XmlConfig/UserConfig.xml"
   },
   "SharePoint": {
@@ -146,7 +148,7 @@ Example:
 }
 ```
 
-`Sql:BatchSize` controls both the SharePoint page size and the number of rows sent per SQL bulk-copy batch.
+`Sql:BatchSize` controls both the SharePoint page size and the number of rows sent per SQL bulk-copy batch. `Application:EnableMetrics` publishes the `SPO2SQL` OpenTelemetry meter; without `OTEL_EXPORTER_OTLP_ENDPOINT` metrics are written to the console.
 
 Supply secrets outside source control. For local development:
 
@@ -195,7 +197,7 @@ SQL encryption is enforced by default: `Encrypt=true` and `TrustServerCertificat
 ### Known limitations
 
 - The list-specific data-quality routines in `SPO2SQL.Core/SharePoint` are implemented but are **not yet invoked** by the default orchestration.
-- Metrics are emitted as structured per-list log entries; there is no OpenTelemetry exporter yet.
+- Metrics are exported to the console by default; set `OTEL_EXPORTER_OTLP_ENDPOINT` to switch to an OTLP collector.
 - Integration tests against a live tenant and SQL Server are not part of the automated suite.
 
 ---
