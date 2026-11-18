@@ -4,6 +4,10 @@ using NSubstitute;
 using SPO2SQL.Logging;
 using Xunit;
 
+// CA1873 targets production logging calls; the calls in this file are NSubstitute
+// verifications whose argument matchers must be evaluated eagerly.
+#pragma warning disable CA1873
+
 namespace SPO2SQL.Core.Tests;
 
 [CollectionDefinition("LoggingTests", DisableParallelization = true)]
