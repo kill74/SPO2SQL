@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
 using SPO2SQL.Configuration;
 using SPO2SQL.Telemetry;
 
@@ -94,20 +95,38 @@ internal sealed class Program
 
                 if (context.Configuration.GetValue<bool>("Application:EnableMetrics", true))
                 {
-                    services.AddOpenTelemetry()
-                        .WithMetrics(builder =>
-                        {
-                            builder.AddMeter(SyncMetrics.MeterName);
+                    bool useOtlp = !string.IsNullOrWhiteSpace(
+                        Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
 
-                            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")))
-                            {
-                                builder.AddOtlpExporter();
-                            }
-                            else
-                            {
-                                builder.AddConsoleExporter();
-                            }
-                        });
+                    var telemetry = services.AddOpenTelemetry();
+
+                    telemetry.WithMetrics(builder =>
+                    {
+                        builder.AddMeter(SyncMetrics.MeterName);
+
+                        if (useOtlp)
+                        {
+                            builder.AddOtlpExporter();
+                        }
+                        else
+                        {
+                            builder.AddConsoleExporter();
+                        }
+                    });
+
+                    telemetry.WithTracing(builder =>
+                    {
+                        builder.AddSource(SyncTracing.SourceName);
+
+                        if (useOtlp)
+                        {
+                            builder.AddOtlpExporter();
+                        }
+                        else
+                        {
+                            builder.AddConsoleExporter();
+                        }
+                    });
                 }
 
                 services.AddSingleton<SyncExitCode>();
