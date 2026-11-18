@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Text;
 using Microsoft.SharePoint.Client;
 using SPO2SQL.Logging;
@@ -12,46 +12,67 @@ public class SPOList : Context
 {
     private static readonly string[] s_nullArray = ["NULL"];
 
-    private List _list;
+    private List? _list;
 
-    public string Name { get; set; }
+    /// <summary>
+    /// Number of SharePoint items requested per page. Bound to Sql:BatchSize.
+    /// </summary>
+    public int PageSize { get; set; } = 500;
 
-    public ListItemCollection ItemCollection { get; set; }
+    public string Name { get; set; } = string.Empty;
 
-    public FieldCollection Fields { get; set; }
+    /// <summary>
+    /// All items returned by the query, across every SharePoint page.
+    /// </summary>
+    public IReadOnlyList<ListItem> ItemCollection { get; private set; } = Array.Empty<ListItem>();
 
-    public string CAMLQuery { get; set; }
+    public FieldCollection Fields { get; set; } = null!;
 
-    public void Build()
+    public string? CAMLQuery { get; set; }
+
+    public async Task BuildAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(Name))
             {
-                throw new InvalidOperationException("List 'Name' property must be set before calling Build()");
+                throw new InvalidOperationException("List 'Name' property must be set before calling BuildAsync()");
             }
 
             Logger.Log(2, $"Building list '{Name}' from site '{Site}'");
 
             if (web == null)
             {
-                BuildContext();
+                await BuildContextAsync(cancellationToken).ConfigureAwait(false);
             }
 
             CamlQuery camlQuery = string.IsNullOrEmpty(CAMLQuery)
-                ? CamlQuery.CreateAllItemsQuery()
+                ? CamlQuery.CreateAllItemsQuery(PageSize)
                 : new CamlQuery { ViewXml = CAMLQuery };
 
-            _list = web.Lists.GetByTitle(Name);
-            ItemCollection = _list.GetItems(camlQuery);
+            _list = (web ?? throw new InvalidOperationException("SharePoint context is not initialized."))
+                .Lists.GetByTitle(Name);
             Fields = _list.Fields;
 
             Ctx.Load(_list);
-            Ctx.Load(ItemCollection);
             Ctx.Load(Fields);
+            await ExecuteQueryAsync(cancellationToken).ConfigureAwait(false);
 
-            Logger.Log(2, "Executing query to retrieve list items");
-            Ctx.ExecuteQuery();
+            var items = new List<ListItem>();
+            do
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                ListItemCollection page = _list.GetItems(camlQuery);
+                Ctx.Load(page);
+                await ExecuteQueryAsync(cancellationToken).ConfigureAwait(false);
+
+                items.AddRange(page);
+                camlQuery.ListItemCollectionPosition = page.ListItemCollectionPosition;
+            }
+            while (camlQuery.ListItemCollectionPosition != null);
+
+            ItemCollection = items;
 
             Logger.LogDebug($"Successfully loaded {ItemCollection.Count} items from list '{Name}'");
         }
@@ -62,13 +83,17 @@ public class SPOList : Context
         }
     }
 
-    public void Update()
+    public ListItem GetItemById(int id) =>
+        ItemCollection.FirstOrDefault(item => item.Id == id)
+        ?? throw new InvalidOperationException($"Item with ID {id} was not loaded from list '{Name}'.");
+
+    public async Task UpdateAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             Logger.Log(2, $"Updating list '{Name}'");
-            Ctx.ExecuteQuery();
-            Build();
+            await ExecuteQueryAsync(cancellationToken).ConfigureAwait(false);
+            await BuildAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -83,7 +108,7 @@ public class SPOList : Context
         {
             if (_list == null)
             {
-                throw new InvalidOperationException($"List '{Name}' has not been built. Call Build() first.");
+                throw new InvalidOperationException($"List '{Name}' has not been built. Call BuildAsync() first.");
             }
 
             ListItem listItem = _list.AddItem(new ListItemCreationInformation());
@@ -123,12 +148,12 @@ public class SPOList : Context
                 {
                     object fieldValue = item[field.InternalName];
                     string formattedValue = FormatFieldOutput(field, fieldValue);
-                    sb.AppendLine($"{field.Title}|{field.InternalName}|{formattedValue}|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|{fieldValue?.GetType().Name ?? "NULL"}");
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"{field.Title}|{field.InternalName}|{formattedValue}|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|{fieldValue?.GetType().Name ?? "NULL"}");
                 }
                 catch (Exception ex)
                 {
                     Logger.LogWarning($"Could not retrieve value for field '{field.Title}': {ex.Message}");
-                    sb.AppendLine($"{field.Title}|{field.InternalName}|ERROR|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|ERROR");
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"{field.Title}|{field.InternalName}|ERROR|{field.CanBeDeleted}|{field.Hidden}|{field.TypeAsString}|{field.ReadOnlyField}|{field.FromBaseType}|{field.Required}|ERROR");
                 }
             }
 

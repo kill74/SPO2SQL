@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.SharePoint.Client;
 using SPO2SQL.Logging;
 
@@ -23,7 +20,7 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
     {
     }
 
-    public override bool Execute()
+    public override async Task<bool> ExecuteAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -37,7 +34,8 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
                 $"<Geq><FieldRef Name='Modified' /><Value Type='DateTime'>{cutoffIso}</Value></Geq>" +
                 "</Where></Query></View>";
 
-            using var unitList = CreateAndBuildList(UNIT_LIST, UNIT_SITE, unitQuery);
+            using var unitList = await CreateAndBuildListAsync(UNIT_LIST, UNIT_SITE, unitQuery, cancellationToken)
+                .ConfigureAwait(false);
 
             var unitMap = new Dictionary<string, ListItem>();
             foreach (ListItem unit in unitList.ItemCollection)
@@ -55,10 +53,9 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
                 return true;
             }
 
-            Logger.LogDebug($"Found {unitMap.Count} recently modified Unit items");
-
             string invoiceQuery = BuildInvoiceQuery(unitMap);
-            using var invoiceList = CreateAndBuildList(INVOICE_LIST, INVOICE_SITE, invoiceQuery);
+            using var invoiceList = await CreateAndBuildListAsync(INVOICE_LIST, INVOICE_SITE, invoiceQuery, cancellationToken)
+                .ConfigureAwait(false);
 
             if (invoiceList.ItemCollection.Count == 0)
             {
@@ -66,9 +63,7 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
                 return true;
             }
 
-            Logger.LogDebug($"Found {invoiceList.ItemCollection.Count} Invoice Request items to process");
-
-            ProcessListItemsInBatches(invoiceList, item =>
+            await ProcessListItemsInBatchesAsync(invoiceList, item =>
             {
                 try
                 {
@@ -85,7 +80,9 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
                 {
                     Logger.LogDebug($"Failed to update invoice item {item.Id}: {ex.Message}");
                 }
-            });
+
+                return Task.CompletedTask;
+            }, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             Logger.LogWarning("Completed Invoice Request approver update operation");
             return true;
@@ -106,11 +103,10 @@ internal sealed class InvoiceRequestDQ : DataQualityBase
 
         var conditions = unitMap.Keys.Select(key =>
             $"<Eq><FieldRef Name='{UNIT_LOOKUP_FIELD}' />" +
-            $"<Value Type='Text'>{CamlQueryBuilder.EscapeXmlValue(key)}</Value></Eq>");
+            $"<Value Type='Text'>{CamlQueryBuilder.EscapeXmlValue(key)}</Value></Eq>").ToArray();
 
-        var conditionArray = conditions.ToArray();
-        return conditionArray.Length == 1
-            ? $"<View><Query><Where>{conditionArray[0]}</Where></Query></View>"
-            : CamlQueryBuilder.BuildOrQuery(conditionArray);
+        return conditions.Length == 1
+            ? $"<View><Query><Where>{conditions[0]}</Where></Query></View>"
+            : CamlQueryBuilder.BuildOrQuery(conditions);
     }
 }

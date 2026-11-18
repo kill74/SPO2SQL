@@ -11,6 +11,11 @@
     <FileVersion>2.0.0.0</FileVersion>
     <InformationalVersion>2.0.0</InformationalVersion>
     <UserSecretsId>spo2sql-modernization-secrets</UserSecretsId>
-    <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625;CS8605;CS8605;CA1416;NU1603;CS0618;CS0649;CA1305;CA1310;CA1311;CA1304;CA1846;CA1862;CA1866;CA5350;CA2201;CA1805</NoWarn>
+    <NoWarn>$(NoWarn);NU1603</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Explicit patched version: 8.0.0 is affected by GHSA-8g4q-xg66-9fp4 and GHSA-hh2w-p6rv-4g7w. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+  </ItemGroup>
 </Project>

@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Text;
 using Microsoft.Data.SqlClient;
 using Microsoft.SharePoint.Client;
@@ -13,8 +10,7 @@ namespace SPO2SQL.SqlServer;
 
 internal sealed class SQLInteraction : IDisposable
 {
-    private const string DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.fff";
-    private const string FUTURE_DATE = "2100-01-01 00:00:00.000";
+    private static readonly DateTime FutureSnapshot = new(2100, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private static readonly HashSet<string> ValidSqlTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -29,30 +25,34 @@ internal sealed class SQLInteraction : IDisposable
 
     private bool _transactionCommitted;
 
-    public SqlConnection Connection { get; private set; }
-    public SqlCommand Command { get; private set; }
-    public SqlTransaction Transaction { get; private set; }
-    public SPOList List { get; set; }
-    public string TableName { get; private set; }
-    public Dictionary<string, Field> FNDictionary { get; private set; }
-    public string CurrentTime { get; private set; }
+    public SqlConnection? Connection { get; private set; }
+    public SqlCommand? Command { get; private set; }
+    public SqlTransaction? Transaction { get; private set; }
+    public SPOList List { get; set; } = null!;
+    public string TableName { get; private set; } = string.Empty;
+    public Dictionary<string, Field> FNDictionary { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Watermark captured before the SharePoint read. Reusing this value on the next
+    /// incremental run ensures items changed while the sync was running are not lost.
+    /// </summary>
+    public DateTime CurrentTime { get; private set; }
 
     public bool DailyMode { get; set; }
     public int CommandTimeoutSeconds { get; set; } = 300;
     public CancellationToken CancellationToken { get; set; }
 
-    private HashSet<string> IgnoredColumns { get; set; }
-    public Dictionary<string, ColumnMapping> ColumnMappings { get; private set; }
+    /// <summary>Items successfully written during the last transfer.</summary>
+    public int ProcessedItems { get; private set; }
 
-    private static string SanitizeSqlType(string dataType)
-    {
-        if (dataType != null && ValidSqlTypes.Contains(dataType.Trim()))
-        {
-            return dataType.Trim();
-        }
+    /// <summary>Items that failed to be written during the last transfer.</summary>
+    public int FailedItems { get; private set; }
 
-        return null;
-    }
+    private HashSet<string>? IgnoredColumns { get; set; }
+    public Dictionary<string, ColumnMapping>? ColumnMappings { get; private set; }
+
+    private static string? SanitizeSqlType(string? dataType) =>
+        dataType != null && ValidSqlTypes.Contains(dataType.Trim()) ? dataType.Trim() : null;
 
     public void Dispose()
     {
@@ -61,150 +61,103 @@ internal sealed class SQLInteraction : IDisposable
             SafeRollback();
         }
 
+        Transaction?.Dispose();
         Command?.Dispose();
-        Connection?.Close();
         Connection?.Dispose();
     }
 
-    public void Build()
+    public async Task BuildAsync()
     {
-        Logger.Log(1, "[Build] Starting SQL build process for list: " + (List?.Name ?? "null"));
+        ArgumentNullException.ThrowIfNull(List);
 
-        try
+        Logger.Log(1, "[Build] Starting SQL build process for list: " + List.Name);
+
+        IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
+        TableName = ToPascalCase(List.Name, false);
+
+        Connection = new SqlConnection(ConfigurationReader.GetSqlConnectionString());
+        Logger.Log(1, "[Build] Establishing SQL connection...");
+        await Connection.OpenAsync(CancellationToken).ConfigureAwait(false);
+
+        InitializeCommand();
+        await EnsureMetadataTableAsync().ConfigureAwait(false);
+
+        CurrentTime = DateTime.UtcNow;
+
+        if (DailyMode && await TableExistsAsync(TableName).ConfigureAwait(false))
         {
-            IgnoredColumns = ConfigurationReader.GetIgnoredColumns();
-
-            Logger.Log(1, "[Build] Ignored columns from config: " + (IgnoredColumns == null ? "None" : string.Join(", ", IgnoredColumns)));
-
-            TableName = ToPascalCase(List.Name, false);
-
-            try
+            DateTime? lastSync = await GetLastSyncDateAsync().ConfigureAwait(false);
+            if (lastSync.HasValue)
             {
-                Connection = new SqlConnection(ConfigurationReader.GetSqlConnectionString());
-                Logger.Log(1, "[Build] Establishing SQL connection...");
-                Connection.Open();
-            }
-            catch (SqlException ex)
-            {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: Database connection failed - {ex.Message}");
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
-                throw;
-            }
-
-            InitializeCommandAndTransaction();
-            EnsureMetadataTable();
-            CurrentTime = DateTime.Now.ToString(DATE_FORMAT);
-
-            if (DailyMode && TableExists(TableName))
-            {
-                string lastSync = GetLastSyncDate();
-                if (lastSync != null)
-                {
-                    Logger.Log(1, "[Build] Applying incremental filter: Modified >= " + lastSync);
-                    List.CAMLQuery = CamlQueryBuilder.BuildDateRangeQuery("Modified",
-                        DateTime.Parse(lastSync), DateTime.Now);
-                }
-            }
-
-            try
-            {
-                Logger.Log(1, "[Build] Initializing SharePoint list structure...");
-                List.Build();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: SharePoint list initialization failed - {ex.Message}");
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
-                throw;
-            }
-
-            try
-            {
-                FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
-                Logger.Log(1, "[Build] Building field dictionary...");
-                BuildDictionary();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: Field dictionary creation failed - {ex.Message}");
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
-                throw;
-            }
-
-            try
-            {
-                if (!TableExists(TableName))
-                {
-                    Logger.Log(1, "[Build] Creating new table: " + TableName);
-                    CreateTable();
-                }
-                else
-                {
-                    Logger.Log(1, "[Build] Updating existing table: " + TableName);
-                    UpdateTableDesign();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.Build: Table structure operation failed - {ex.Message}");
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
-                throw;
+                Logger.Log(1, "[Build] Applying incremental filter: Modified >= " + lastSync.Value.ToString("O", CultureInfo.InvariantCulture));
+                List.CAMLQuery = CamlQueryBuilder.BuildDateRangeQuery("Modified", lastSync.Value, CurrentTime);
             }
         }
-        catch (Exception ex)
+
+        Logger.Log(1, "[Build] Initializing SharePoint list structure...");
+        await List.BuildAsync(CancellationToken).ConfigureAwait(false);
+
+        FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
+        BuildDictionary();
+
+        if (!await TableExistsAsync(TableName).ConfigureAwait(false))
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.Build: Critical failure during build process - {ex.Message}");
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
-            throw;
+            Logger.Log(1, "[Build] Creating new table: " + TableName);
+            await CreateTableAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            Logger.Log(1, "[Build] Updating existing table: " + TableName);
+            await UpdateTableDesignAsync().ConfigureAwait(false);
         }
     }
 
-    public void DailyUpdate()
+    public async Task DailyUpdateAsync()
     {
         try
         {
             Logger.Log(2, "[DailyUpdate] Starting daily update for table " + TableName);
 
-            Command.CommandText = $"DELETE FROM [{TableName.Replace("]", "]]")}] WHERE Snapshot = @FutureDate";
+            BeginTransaction();
+
+            Command!.CommandText = $"DELETE FROM [{TableName.Replace("]", "]]")}] WHERE Snapshot = @FutureDate";
             Command.Parameters.Clear();
-            Command.Parameters.AddWithValue("@FutureDate", FUTURE_DATE);
-            Command.ExecuteNonQuery();
+            Command.Parameters.AddWithValue("@FutureDate", FutureSnapshot);
+            await Command.ExecuteNonQueryAsync(CancellationToken).ConfigureAwait(false);
 
-            TransferData(FUTURE_DATE);
+            await TransferDataAsync(FutureSnapshot).ConfigureAwait(false);
+            await UpdateMetadataAsync().ConfigureAwait(false);
 
-            UpdateMetadata();
-
-            Transaction.Commit();
+            await Transaction!.CommitAsync(CancellationToken).ConfigureAwait(false);
             _transactionCommitted = true;
             Logger.Log(2, "[DailyUpdate] Transaction committed successfully");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.DailyUpdate: Critical failure during daily update - {ex.Message}");
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
+            Logger.LogError("[DailyUpdate] Critical failure during daily update", ex);
             SafeRollback();
             throw;
         }
     }
 
-    public void CurrentTimeUpdate()
+    public async Task CurrentTimeUpdateAsync()
     {
         try
         {
             Logger.Log(2, "[CurrentTimeUpdate] Starting current-time update for " + TableName);
 
-            TransferData(CurrentTime);
+            BeginTransaction();
 
-            UpdateMetadata();
+            await TransferDataAsync(CurrentTime).ConfigureAwait(false);
+            await UpdateMetadataAsync().ConfigureAwait(false);
 
-            Transaction.Commit();
+            await Transaction!.CommitAsync(CancellationToken).ConfigureAwait(false);
             _transactionCommitted = true;
             Logger.Log(2, "[CurrentTimeUpdate] Transaction committed successfully");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.CurrentTimeUpdate: Critical failure during current-time update - {ex.Message}");
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
+            Logger.LogError("[CurrentTimeUpdate] Critical failure during current-time update", ex);
             SafeRollback();
             throw;
         }
@@ -222,168 +175,142 @@ internal sealed class SQLInteraction : IDisposable
 
         foreach (Field field in List.Fields)
         {
-            if (field.TypeAsString != "Computed")
+            if (field.TypeAsString == "Computed")
             {
-                try
+                continue;
+            }
+
+            try
+            {
+                string columnName = field.InternalName;
+
+                if (ColumnMappings != null)
                 {
-                    string columnName = field.InternalName;
-
-                    if (ColumnMappings != null)
+                    if (ColumnMappings.TryGetValue(columnName, out var mapping))
                     {
-                        if (ColumnMappings.TryGetValue(columnName, out var mapping))
+                        if (mapping.Ignore)
                         {
-                            if (mapping.Ignore)
-                            {
-                                ignoredFields++;
-                                Logger.Log(1, "[BuildDictionary] Ignored field (by mapping) " + columnName);
-                                continue;
-                            }
+                            ignoredFields++;
+                            continue;
+                        }
 
-                            string destinationName = mapping.Destination;
-                            FNDictionary.Add(GetKeyName(destinationName, 1), field);
-                            processedFields++;
-                            Logger.Log(1, "[BuildDictionary] Added mapped field " + columnName + " -> " + destinationName);
-                        }
-                        else
-                        {
-                            skippedFields++;
-                            Logger.Log(1, "[BuildDictionary] Skipped field (not mapped) " + columnName);
-                        }
-                    }
-                    else if (IgnoredColumns != null && IgnoredColumns.Contains(columnName))
-                    {
-                        ignoredFields++;
-                        Logger.Log(1, "[BuildDictionary] Ignored field (global): " + columnName);
+                        string destinationName = mapping.Destination;
+                        FNDictionary.Add(GetKeyName(destinationName, 1), field);
+                        processedFields++;
                     }
                     else
                     {
-                        FNDictionary.Add(GetKeyName(columnName, 1), field);
-                        processedFields++;
-                        Logger.Log(1, "[BuildDictionary] Added field: " + columnName);
+                        skippedFields++;
                     }
                 }
-                catch (Exception ex)
+                else if (IgnoredColumns != null && IgnoredColumns.Contains(columnName))
                 {
-                    skippedFields++;
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.BuildDictionary: Failed to process field: {field.Title} - {ex.Message}");
+                    ignoredFields++;
                 }
+                else
+                {
+                    FNDictionary.Add(GetKeyName(columnName, 1), field);
+                    processedFields++;
+                }
+            }
+            catch (Exception ex)
+            {
+                skippedFields++;
+                Logger.LogError($"Failed to process field '{field.Title}'", ex);
             }
         }
 
-        Logger.Log(1, "[BuildDictionary] Dictionary built. Processed: " + processedFields + ", Skipped: " + skippedFields + ", Ignored: " + ignoredFields);
+        Logger.Log(1, $"[BuildDictionary] Dictionary built. Processed: {processedFields}, Skipped: {skippedFields}, Ignored: {ignoredFields}");
     }
 
-    private bool TableExists(string listName)
+    private async Task<bool> TableExistsAsync(string tableName)
     {
-        try
-        {
-            Command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @TableName";
-            Command.Parameters.Clear();
-            Command.Parameters.AddWithValue("@TableName", listName);
-            bool exists = (int)Command.ExecuteScalar() != 0;
-            Logger.Log(1, $"[TableExists] Table '{listName}' exists: {exists}");
-            return exists;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TableExists: Failed to check existence of table '{listName}' - {ex.Message}");
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
-            throw;
-        }
+        Command!.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = @TableName";
+        Command.Parameters.Clear();
+        Command.Parameters.AddWithValue("@TableName", tableName);
+        bool exists = (int)(await Command.ExecuteScalarAsync(CancellationToken).ConfigureAwait(false))! != 0;
+        Logger.Log(1, $"[TableExists] Table '{tableName}' exists: {exists}");
+        return exists;
     }
 
-    private void CreateTable()
+    private async Task CreateTableAsync()
     {
-        Logger.Log(1, "[CreateTable] Creating new table: " + TableName);
-        var columns = new List<string> { "[Snapshot] datetime NULL" };
+        var columns = new List<string> { "[Snapshot] datetime2 NULL" };
 
         foreach (var fn in FNDictionary)
         {
-            string sqlType = null;
-            if (ColumnMappings != null && ColumnMappings.TryGetValue(fn.Value.InternalName, out var mapping) && !string.IsNullOrEmpty(mapping.DataType))
-            {
-                sqlType = SanitizeSqlType(mapping.DataType) ?? SQLFieldType(fn.Value);
-            }
-            else
-            {
-                sqlType = SQLFieldType(fn.Value);
-            }
-
+            string? sqlType = ResolveSqlType(fn.Value);
             if (sqlType != null)
             {
                 columns.Add($"[{fn.Key.Replace("]", "]]")}] {sqlType} NULL");
             }
         }
 
-        Command.CommandText =
+        Command!.CommandText =
             $"CREATE TABLE [{TableName.Replace("]", "]]")}] ({string.Join(", ", columns)})";
-        try
-        {
-            Command.ExecuteNonQuery();
-            Logger.Log(1, "[CreateTable] Successfully created table: " + TableName);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.CreateTable: Failed to create table: {TableName} - {ex.Message}");
-            throw;
-        }
+
+        await Command.ExecuteNonQueryAsync(CancellationToken).ConfigureAwait(false);
+        Logger.Log(1, "[CreateTable] Successfully created table: " + TableName);
     }
 
-    private void UpdateTableDesign()
+    private async Task UpdateTableDesignAsync()
     {
-        Logger.Log(1, "[UpdateTableDesign] Updating design for table: " + TableName);
         int updatedColumns = 0;
         int failedColumns = 0;
 
         foreach (var fn in FNDictionary)
         {
+            string? sqlType = ResolveSqlType(fn.Value);
+            if (sqlType == null)
+            {
+                failedColumns++;
+                continue;
+            }
+
             try
             {
-                string sqlType = null;
-                if (ColumnMappings != null && ColumnMappings.TryGetValue(fn.Value.InternalName, out var mapping) && !string.IsNullOrEmpty(mapping.DataType))
-                {
-                    sqlType = SanitizeSqlType(mapping.DataType) ?? SQLFieldType(fn.Value);
-                }
-                else
-                {
-                    sqlType = SQLFieldType(fn.Value);
-                }
-
-                if (sqlType == null)
-                {
-                    failedColumns++;
-                    continue;
-                }
-
                 string colName = fn.Key;
 
-                Command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColName";
+                Command!.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColName";
                 Command.Parameters.Clear();
                 Command.Parameters.AddWithValue("@TableName", TableName);
                 Command.Parameters.AddWithValue("@ColName", colName);
-                if ((int)Command.ExecuteScalar() == 0)
+                if ((int)(await Command.ExecuteScalarAsync(CancellationToken).ConfigureAwait(false))! == 0)
                 {
                     string safeTable = $"[{TableName.Replace("]", "]]")}]";
                     string safeCol = $"[{colName.Replace("]", "]]")}]";
                     Command.CommandText = $"ALTER TABLE {safeTable} ADD {safeCol} {sqlType} NULL";
                     Command.Parameters.Clear();
-                    Command.ExecuteNonQuery();
+                    await Command.ExecuteNonQueryAsync(CancellationToken).ConfigureAwait(false);
                     updatedColumns++;
                 }
             }
             catch (Exception ex)
             {
                 failedColumns++;
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.UpdateTableDesign: Failed to update column: {fn.Key} - {ex.Message}");
+                Logger.LogError($"Failed to update column '{fn.Key}'", ex);
             }
         }
 
-        Logger.Log(1, "[UpdateTableDesign] Design update completed. Updated: " + updatedColumns + ", Failed: " + failedColumns);
+        Logger.Log(1, $"[UpdateTableDesign] Design update completed. Updated: {updatedColumns}, Failed: {failedColumns}");
     }
 
-    private void TransferData(string snapDate)
+    private string? ResolveSqlType(Field field)
+    {
+        if (ColumnMappings != null &&
+            ColumnMappings.TryGetValue(field.InternalName, out var mapping) &&
+            !string.IsNullOrEmpty(mapping.DataType))
+        {
+            return SanitizeSqlType(mapping.DataType) ?? SQLFieldType(field);
+        }
+
+        return SQLFieldType(field);
+    }
+
+    private async Task TransferDataAsync(DateTime snapDate)
     {
         Logger.Log(1, "[TransferData] Beginning data transfer for snapshot: " + snapDate);
+
         string sqlColNames = GetSQLColNames();
         int processedItems = 0;
         int failedItems = 0;
@@ -405,83 +332,39 @@ internal sealed class SQLInteraction : IDisposable
 
             try
             {
-                Command.CommandText = insertBase;
+                Command!.CommandText = insertBase;
                 Command.Parameters.Clear();
                 Command.Parameters.AddWithValue("@Snapshot", snapDate);
 
-                int idx = 0;
-                foreach (Field field in fieldList)
+                for (int idx = 0; idx < fieldList.Count; idx++)
                 {
+                    Field field = fieldList[idx];
                     object obj;
                     try
-                    { obj = listItem[field.InternalName]; }
+                    {
+                        obj = listItem[field.InternalName];
+                    }
                     catch (Exception ex)
                     {
                         throw new InvalidOperationException(
                             $"Failed to read field '{field.InternalName}' for SharePoint item.", ex);
                     }
-                    string paramName = $"@F{idx}";
 
-                    if (obj != null)
-                    {
-                        if (obj is FieldLookupValue lookup)
-                        {
-                            Command.Parameters.AddWithValue(paramName, lookup.LookupId);
-                        }
-                        else if (obj is FieldUserValue user)
-                        {
-                            Command.Parameters.AddWithValue(paramName, user.LookupId);
-                        }
-                        else if (obj is FieldUrlValue url)
-                        {
-                            Command.Parameters.AddWithValue(paramName, (object)url.Url ?? DBNull.Value);
-                        }
-                        else if (obj is ContentTypeId ctId)
-                        {
-                            Command.Parameters.AddWithValue(paramName, ctId.StringValue);
-                        }
-                        else if (obj is DateTime dt)
-                        {
-                            Command.Parameters.AddWithValue(paramName, dt);
-                        }
-                        else if (obj is FieldLookupValue[] lookups)
-                        {
-                            Command.Parameters.AddWithValue(paramName, lookups.Length > 0 ? (object)string.Join(";", lookups.Select(l => l.LookupId)) : DBNull.Value);
-                        }
-                        else if (obj is FieldUserValue[] users)
-                        {
-                            Command.Parameters.AddWithValue(paramName, users.Length > 0 ? (object)string.Join(";", users.Select(u => u.LookupId)) : DBNull.Value);
-                        }
-                        else
-                        {
-                            Command.Parameters.AddWithValue(paramName, obj);
-                        }
-                    }
-                    else
-                    {
-                        Command.Parameters.AddWithValue(paramName, DBNull.Value);
-                    }
-
-                    idx++;
+                    Command.Parameters.AddWithValue($"@F{idx}", ConvertFieldValue(obj));
                 }
 
-                try
-                {
-                    Command.ExecuteNonQuery();
-                    processedItems++;
-                }
-                catch (Exception ex)
-                {
-                    failedItems++;
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TransferData: Failed to insert item {processedItems + failedItems} - {ex.Message}");
-                }
+                await Command.ExecuteNonQueryAsync(CancellationToken).ConfigureAwait(false);
+                processedItems++;
             }
             catch (Exception ex)
             {
                 failedItems++;
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.TransferData: Failed to process item {processedItems + failedItems} - {ex.Message}");
+                Logger.LogError($"Failed to insert item {processedItems + failedItems}", ex);
             }
         }
+
+        ProcessedItems = processedItems;
+        FailedItems = failedItems;
 
         Logger.Log(1, $"[TransferData] Transfer completed. Processed: {processedItems}, Failed: {failedItems}");
 
@@ -492,9 +375,26 @@ internal sealed class SQLInteraction : IDisposable
         }
     }
 
-    private void EnsureMetadataTable()
+    private static object ConvertFieldValue(object obj) => obj switch
     {
-        Command.CommandText = @"
+        FieldUserValue user => user.LookupId,
+        FieldLookupValue lookup => lookup.LookupId,
+        FieldUrlValue url => (object?)url.Url ?? DBNull.Value,
+        ContentTypeId ctId => ctId.StringValue,
+        DateTime dt => dt,
+        FieldUserValue[] users => users.Length > 0
+            ? string.Join(";", users.Select(u => u.LookupId))
+            : DBNull.Value,
+        FieldLookupValue[] lookups => lookups.Length > 0
+            ? string.Join(";", lookups.Select(l => l.LookupId))
+            : DBNull.Value,
+        null => DBNull.Value,
+        _ => obj
+    };
+
+    private async Task EnsureMetadataTableAsync()
+    {
+        Command!.CommandText = @"
 IF OBJECT_ID(N'[Metadata]', N'U') IS NULL
 BEGIN
     CREATE TABLE [Metadata]
@@ -504,48 +404,27 @@ BEGIN
     );
 END";
         Command.Parameters.Clear();
-        Command.ExecuteNonQuery();
+        await Command.ExecuteNonQueryAsync(CancellationToken).ConfigureAwait(false);
     }
 
-    private static string SQLFieldType(Field field)
+    private static string? SQLFieldType(Field field) => field.TypeAsString switch
     {
-        switch (field.TypeAsString)
-        {
-            case "Attachments":
-            case "Boolean":
-                return "[bit]";
-            case "Calculated":
-                return "[sql_variant]";
-            case "Choice":
-            case "File":
-            case "LookupMulti":
-            case "Note":
-            case "Text":
-            case "URL":
-            case "UserMulti":
-                return "[nvarchar](MAX)";
-            case "ContentTypeId":
-                return "[nvarchar](MAX)";
-            case "Counter":
-            case "Integer":
-            case "ModStat":
-            case "User":
-                return "[int]";
-            case "Currency":
-            case "Number":
-                return "[float]";
-            case "DateTime":
-                return "[datetime]";
-            case "Guid":
-                return "[uniqueidentifier]";
-            case "Lookup":
-                return field.FromBaseType
-                    ? "[nvarchar](MAX)"
-                    : "[int]";
-            default:
-                Logger.Log(1, $"[SQLFieldType] Unknown field type encountered - Field: {field.Title}, Type: {field.TypeAsString}");
-                return null;
-        }
+        "Attachments" or "Boolean" => "[bit]",
+        "Calculated" => "[sql_variant]",
+        "Choice" or "File" or "LookupMulti" or "Note" or "Text" or "URL" or
+        "UserMulti" or "ContentTypeId" => "[nvarchar](MAX)",
+        "Counter" or "Integer" or "ModStat" or "User" => "[int]",
+        "Currency" or "Number" => "[float]",
+        "DateTime" => "[datetime]",
+        "Guid" => "[uniqueidentifier]",
+        "Lookup" => field.FromBaseType ? "[nvarchar](MAX)" : "[int]",
+        _ => LogUnknownFieldType(field)
+    };
+
+    private static string? LogUnknownFieldType(Field field)
+    {
+        Logger.Log(1, $"[SQLFieldType] Unknown field type encountered - Field: {field.Title}, Type: {field.TypeAsString}");
+        return null;
     }
 
     private string GetSQLColNames()
@@ -559,99 +438,83 @@ END";
         return $"({string.Join(", ", columns)})";
     }
 
-    private string GetLastSyncDate()
+    private async Task<DateTime?> GetLastSyncDateAsync()
     {
-        try
+        Command!.CommandText = "SELECT LastRefreshDate FROM Metadata WHERE TableName = @TableName";
+        Command.Parameters.Clear();
+        Command.Parameters.AddWithValue("@TableName", TableName);
+        object? result = await Command.ExecuteScalarAsync(CancellationToken).ConfigureAwait(false);
+
+        if (result == null || result == DBNull.Value)
         {
-            Command.CommandText = "SELECT LastRefreshDate FROM Metadata WHERE TableName = @TableName";
-            Command.Parameters.Clear();
-            Command.Parameters.AddWithValue("@TableName", TableName);
-            object result = Command.ExecuteScalar();
-
-            if (result == null || result == DBNull.Value)
-            {
-                return null;
-            }
-
-            if (result is DateTime dt)
-            {
-                return dt.ToString(DATE_FORMAT);
-            }
-
-            string str = result.ToString();
-            return string.IsNullOrEmpty(str) ? null : str;
+            return null;
         }
-        catch (Exception ex)
+
+        if (result is DateTime dt)
         {
-            throw new InvalidOperationException(
-                $"Failed to read synchronization metadata for table '{TableName}'.", ex);
+            return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
         }
+
+        return DateTime.TryParse(
+            result.ToString(),
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+            out DateTime parsed)
+            ? parsed
+            : null;
     }
 
-    private void UpdateMetadata()
+    private async Task UpdateMetadataAsync()
     {
         Logger.Log(1, $"[UpdateMetadata] Updating metadata for table: {TableName}");
-        try
-        {
-            Command.CommandText = "DELETE FROM Metadata WHERE TableName = @TableName";
-            Command.Parameters.Clear();
-            Command.Parameters.AddWithValue("@TableName", TableName);
-            Command.ExecuteNonQuery();
-            Command.CommandText = "INSERT INTO Metadata (TableName, LastRefreshDate) VALUES (@TableName, @CurrentTime)";
-            Command.Parameters.Clear();
-            Command.Parameters.AddWithValue("@TableName", TableName);
-            Command.Parameters.AddWithValue("@CurrentTime", CurrentTime);
-            Command.ExecuteNonQuery();
-            Logger.Log(1, $"[UpdateMetadata] Metadata updated successfully");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.UpdateMetadata: Failed to update metadata - {ex.Message}");
-            throw;
-        }
+
+        Command!.CommandText = "DELETE FROM Metadata WHERE TableName = @TableName";
+        Command.Parameters.Clear();
+        Command.Parameters.AddWithValue("@TableName", TableName);
+        await Command.ExecuteNonQueryAsync(CancellationToken).ConfigureAwait(false);
+
+        Command.CommandText = "INSERT INTO Metadata (TableName, LastRefreshDate) VALUES (@TableName, @CurrentTime)";
+        Command.Parameters.Clear();
+        Command.Parameters.AddWithValue("@TableName", TableName);
+        Command.Parameters.AddWithValue("@CurrentTime", CurrentTime);
+        await Command.ExecuteNonQueryAsync(CancellationToken).ConfigureAwait(false);
+
+        Logger.Log(1, "[UpdateMetadata] Metadata updated successfully");
     }
 
     private string GetKeyName(string key, int i = 1)
     {
         string testKey = i == 1 ? key : $"{key}{i}";
-        return FNDictionary.ContainsKey(testKey)
-            ? GetKeyName(key, i + 1)
-            : testKey;
+        return FNDictionary.ContainsKey(testKey) ? GetKeyName(key, i + 1) : testKey;
     }
 
-    private string GetActualColName(Field field)
+    private void InitializeCommand()
     {
-        string name = ColNameConvetions(field);
-        int count = 0;
-
-        foreach (Field f in List.Fields)
-        {
-            if (f.TypeAsString != "Computed" &&
-                name.Equals(ColNameConvetions(f), StringComparison.OrdinalIgnoreCase))
-            {
-                count++;
-            }
-        }
-
-        return count > 1
-            ? ToPascalCase(field.InternalName, true)
-            : name;
+        Command = Connection!.CreateCommand();
+        Command.CommandTimeout = CommandTimeoutSeconds;
     }
-    private static string ColNameConvetions(Field field)
+
+    /// <summary>
+    /// Starts the write transaction only after all SharePoint data has been read and
+    /// transformed, so no database locks are held during network calls.
+    /// </summary>
+    private void BeginTransaction()
     {
-        var sb = new StringBuilder(ToPascalCase(field.Title, false));
-        string type = field.TypeAsString;
+        Transaction = Connection!.BeginTransaction($"{TableName} TXN");
+        Command!.Transaction = Transaction;
+    }
 
-        if (type == "Choice")
+    private void SafeRollback()
+    {
+        try
         {
-            sb.Append("Value");
+            Transaction?.Rollback();
+            Logger.Log(1, "[SafeRollback] Transaction rolled back successfully");
         }
-        else if (type == "User" || (type == "Lookup" && !field.FromBaseType))
+        catch (Exception ex)
         {
-            sb.Append("Id");
+            Logger.LogError("[SafeRollback] Failed to rollback transaction", ex);
         }
-
-        return sb.ToString();
     }
 
     private static string ToPascalCase(string text, bool internalName)
@@ -661,7 +524,7 @@ END";
             return string.Empty;
         }
 
-        if (internalName && text.StartsWith("_"))
+        if (internalName && text.StartsWith('_'))
         {
             text += "IN";
         }
@@ -678,65 +541,4 @@ END";
             .Replace("X0020", string.Empty)
             .Replace("X003a", string.Empty);
     }
-
-    private void InitializeCommandAndTransaction()
-    {
-        Command = Connection.CreateCommand();
-        Command.CommandTimeout = CommandTimeoutSeconds;
-        Transaction = Connection.BeginTransaction($"{TableName} TXN");
-        Command.Connection = Connection;
-        Command.Transaction = Transaction;
-    }
-
-    private void SafeRollback()
-    {
-        try
-        {
-            Transaction?.Rollback();
-            Logger.Log(1, "[SafeRollback] Transaction rolled back successfully");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.SafeRollback: Failed to rollback transaction - {ex.Message}");
-        }
-    }
-
-    #region Logging Methods
-
-    private static void LogInfo(string method, string message)
-    {
-        Logger.Log(1, $"SQLInteraction.{method}: {message}");
-    }
-
-    private static void LogError(string method, string message, Exception ex, bool includeStack = false)
-    {
-        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [ERROR] SQLInteraction.{method}: {message} - {ex.Message}");
-        if (includeStack)
-        {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
-        }
-    }
-
-    private static void LogWarning(string method, string message)
-    {
-        Logger.Log(1, $"SQLInteraction.{method}: {message}");
-    }
-
-    private static void LogDebug(string method, string message)
-    {
-        Logger.Log(1, $"SQLInteraction.{method}: {message}");
-    }
-
-    private static void LogFatal(string method, string message, Exception ex)
-    {
-        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [FATAL] SQLInteraction.{method}: {message} - {ex.Message}");
-        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] [DEBUG] Stack trace: {ex.StackTrace}");
-    }
-
-    private static void LogVerbose(string method, string message)
-    {
-        Logger.Log(1, $"SQLInteraction.{method}: {message}");
-    }
-
-    #endregion
 }

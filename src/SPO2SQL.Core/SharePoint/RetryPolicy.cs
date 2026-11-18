@@ -106,6 +106,67 @@ public class RetryPolicy
         throw new InvalidOperationException($"Operation '{operationName}' failed after {_maxRetries + 1} attempts.");
     }
 
+    /// <summary>
+    /// Async variant used by the synchronization pipeline. Delays are cancellation-aware.
+    /// </summary>
+    public async Task<T> ExecuteWithRetryAsync<T>(
+        Func<Task<T>> operation,
+        CancellationToken cancellationToken,
+        string operationName = "Unknown")
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        int attempt = 0;
+        while (attempt <= _maxRetries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                if (attempt > 0)
+                {
+                    Logger.LogWarning($"Retry attempt {attempt} of {_maxRetries} for operation '{operationName}'");
+                }
+
+                return await operation().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsTransientError(ex) && attempt <= _maxRetries)
+            {
+                attempt++;
+                if (attempt > _maxRetries)
+                {
+                    throw new InvalidOperationException($"Operation '{operationName}' failed after {_maxRetries + 1} attempts.", ex);
+                }
+
+                int delayMs = CalculateBackoffDelay(attempt);
+                Logger.LogWarning(
+                    $"Transient error in '{operationName}': {ex.Message}. " +
+                    $"Retrying in {delayMs}ms (attempt {attempt}/{_maxRetries})");
+
+                await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw new InvalidOperationException($"Operation '{operationName}' failed after {_maxRetries + 1} attempts.");
+    }
+
+    public async Task ExecuteWithRetryAsync(
+        Func<Task> operation,
+        CancellationToken cancellationToken,
+        string operationName = "Unknown")
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        await ExecuteWithRetryAsync(
+            async () =>
+            {
+                await operation().ConfigureAwait(false);
+                return true;
+            },
+            cancellationToken,
+            operationName).ConfigureAwait(false);
+    }
+
     public void ExecuteWithRetry(Action operation, CancellationToken cancellationToken, string operationName = "Unknown")
     {
         ArgumentNullException.ThrowIfNull(operation);

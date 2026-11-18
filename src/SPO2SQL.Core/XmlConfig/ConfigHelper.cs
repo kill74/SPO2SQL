@@ -1,25 +1,26 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Xml;
 using SPO2SQL.Logging;
 using SPO2SQL.Security;
 
 namespace SPO2SQL.XmlConfig;
 
+/// <summary>
+/// Reads the legacy XML file used for list mappings. Credentials are intentionally
+/// not read from here; the credential provider chain is the only secret source.
+/// </summary>
 public static class ConfigurationReader
 {
     private static string _configPath = "SPO_to_SQL_config.xml";
-    private static string _sharePointBaseUrlOverride;
-    private static readonly object _lock = new object();
-    private static XmlDocument _xmlDoc;
+    private static string? _sharePointBaseUrlOverride;
+    private static readonly object Lock = new();
+    private static XmlDocument? _xmlDoc;
 
     public static void SetConfigPath(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         Logger.LogDebug($"Setting configuration path to: {path}");
-        lock (_lock)
+        lock (Lock)
         {
             _configPath = path;
             _xmlDoc = null;
@@ -36,25 +37,24 @@ public static class ConfigurationReader
             throw new ArgumentException("SharePoint base URL must be an absolute HTTP or HTTPS URL.", nameof(baseUrl));
         }
 
-        lock (_lock)
+        lock (Lock)
         {
             _sharePointBaseUrlOverride = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
         }
     }
 
-    private static bool ParseBoolean(string value, bool defaultValue)
-    {
-        return bool.TryParse(value, out var result) ? result : defaultValue;
-    }
+    private static bool ParseBoolean(string? value, bool defaultValue) =>
+        bool.TryParse(value, out bool result) ? result : defaultValue;
 
-    private static void LoadConfig()
+    private static XmlDocument LoadConfig()
     {
-        if (_xmlDoc != null)
+        XmlDocument? document = Volatile.Read(ref _xmlDoc);
+        if (document != null)
         {
-            return;
+            return document;
         }
 
-        lock (_lock)
+        lock (Lock)
         {
             if (_xmlDoc == null)
             {
@@ -66,23 +66,26 @@ public static class ConfigurationReader
                         XmlResolver = null
                     };
 
-                    _xmlDoc = new XmlDocument { XmlResolver = null };
+                    var loaded = new XmlDocument { XmlResolver = null };
                     using var reader = XmlReader.Create(_configPath, settings);
-                    _xmlDoc.Load(reader);
+                    loaded.Load(reader);
+                    _xmlDoc = loaded;
                     Logger.LogDebug($"Configuration file loaded successfully from {_configPath}");
                 }
                 catch (Exception ex)
                 {
                     Logger.LogError($"Failed to load configuration file from {_configPath}", ex);
-                    throw new Exception($"Error loading configuration file: {ex.Message}", ex);
+                    throw new InvalidOperationException($"Error loading configuration file: {ex.Message}", ex);
                 }
             }
+
+            return _xmlDoc;
         }
     }
 
-    public static Dictionary<string, ColumnMapping> GetSelectedColumns(string listName = null)
+    public static Dictionary<string, ColumnMapping>? GetSelectedColumns(string? listName = null)
     {
-        LoadConfig();
+        XmlDocument document = LoadConfig();
 
         try
         {
@@ -96,6 +99,7 @@ public static class ConfigurationReader
                         Logger.Log(2, "List " + listName + " is configured to be ignored.");
                         return null;
                     }
+
                     if (listConfig.Columns != null)
                     {
                         Logger.Log(1, "Using specific configuration for list: " + listName);
@@ -104,7 +108,7 @@ public static class ConfigurationReader
                 }
             }
 
-            var columnNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/SelectColumns/column");
+            var columnNodes = document.SelectNodes("//Configuration/ReplicationConfiguration/SelectColumns/column");
 
             if (columnNodes == null || columnNodes.Count == 0)
             {
@@ -116,40 +120,42 @@ public static class ConfigurationReader
 
             foreach (XmlNode node in columnNodes)
             {
-                var sourceAttr = node.Attributes["source"];
-                var destAttr = node.Attributes["destination"];
-                var ignoreAttr = node.Attributes["ignore"];
-
-                if (sourceAttr != null)
+                var sourceAttr = node.Attributes?["source"];
+                if (sourceAttr == null)
                 {
-                    var mapping = new ColumnMapping
-                    {
-                        Source = sourceAttr.Value,
-                        Destination = destAttr?.Value ?? sourceAttr.Value,
-                        Ignore = ignoreAttr != null && bool.Parse(ignoreAttr.Value)
-                    };
-
-                    columnMappings[mapping.Source] = mapping;
-                    Logger.Log(1, "Added column mapping: " + mapping.Source + " -> " + mapping.Destination + " (Ignore: " + mapping.Ignore + ")");
+                    continue;
                 }
+
+                var destAttr = node.Attributes?["destination"];
+                var ignoreAttr = node.Attributes?["ignore"];
+
+                var mapping = new ColumnMapping
+                {
+                    Source = sourceAttr.Value,
+                    Destination = destAttr?.Value ?? sourceAttr.Value,
+                    Ignore = ParseBoolean(ignoreAttr?.Value, false)
+                };
+
+                columnMappings[mapping.Source] = mapping;
+                Logger.Log(1, $"Added column mapping: {mapping.Source} -> {mapping.Destination} (Ignore: {mapping.Ignore})");
             }
 
             return columnMappings.Count > 0 ? columnMappings : null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
-            Console.WriteLine("Error reading selected columns: " + ex.Message);
-            throw new Exception("Error reading selected columns configuration: " + ex.Message);
+            Logger.LogError("Error reading selected columns configuration", ex);
+            throw new InvalidOperationException("Error reading selected columns configuration.", ex);
         }
     }
 
-    public static HashSet<string> GetIgnoredColumns()
+    public static HashSet<string>? GetIgnoredColumns()
     {
-        LoadConfig();
+        XmlDocument document = LoadConfig();
 
         try
         {
-            var columnNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/GlobalIgnore/Column");
+            var columnNodes = document.SelectNodes("//Configuration/ReplicationConfiguration/GlobalIgnore/Column");
 
             if (columnNodes == null || columnNodes.Count == 0)
             {
@@ -165,7 +171,6 @@ public static class ConfigurationReader
                 {
                     string columnName = node.InnerText.Trim();
                     ignoredColumns.Add(columnName);
-                    Logger.Log(1, "Added ignored column: " + columnName);
                 }
             }
 
@@ -178,155 +183,22 @@ public static class ConfigurationReader
             Logger.Log(2, "Total ignored columns: " + ignoredColumns.Count);
             return ignoredColumns;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
-            Console.WriteLine("Error reading ignored columns: " + ex.Message);
-            throw new Exception("Error reading ignored columns configuration: " + ex.Message);
+            Logger.LogError("Error reading ignored columns configuration", ex);
+            throw new InvalidOperationException("Error reading ignored columns configuration.", ex);
         }
     }
 
-    public static (string Username, string Password) GetSharePointCredentials()
+    public static (string Username, string Password) GetSharePointCredentials() =>
+        CredentialManager.GetSharePointCredentials();
+
+    public static string GetSqlConnectionString() =>
+        CredentialManager.GetSqlConnectionString();
+
+    public static string? GetSharePointBaseUrl()
     {
-        try
-        {
-            return CredentialManager.GetSharePointCredentials();
-        }
-        catch
-        {
-        }
-
-        LoadConfig();
-        try
-        {
-            var spNode = _xmlDoc.SelectSingleNode("//Configuration/SharePoint");
-            if (spNode == null)
-            {
-                throw new InvalidOperationException("SharePoint configuration section not found.");
-            }
-
-            var usernameNode = spNode.SelectSingleNode("Username");
-            var passwordNode = spNode.SelectSingleNode("Password");
-
-            if (usernameNode == null)
-            {
-                throw new InvalidOperationException("Username element not found in SharePoint configuration.");
-            }
-
-            if (passwordNode == null)
-            {
-                throw new InvalidOperationException("Password element not found in SharePoint configuration.");
-            }
-
-            var username = usernameNode.InnerText.Trim();
-            var password = passwordNode.InnerText.Trim();
-
-            if (string.IsNullOrEmpty(username))
-            {
-                throw new InvalidOperationException("Username cannot be empty.");
-            }
-
-            if (string.IsNullOrEmpty(password))
-            {
-                throw new InvalidOperationException("Password cannot be empty.");
-            }
-
-            Logger.Log(2, "SharePoint credentials retrieved successfully from XML config.");
-            return (username, password);
-        }
-        catch (InvalidOperationException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Error retrieving SharePoint credentials: " + ex.Message);
-            throw new InvalidOperationException("Failed to retrieve SharePoint credentials.", ex);
-        }
-    }
-
-    public static string GetSqlConnectionString()
-    {
-        try
-        {
-            return CredentialManager.GetSqlConnectionString();
-        }
-        catch
-        {
-        }
-
-        LoadConfig();
-        try
-        {
-            var connNode = _xmlDoc.SelectSingleNode("//Configuration/SQL/ConnectionString");
-            if (connNode == null)
-            {
-                throw new InvalidOperationException("SQL ConnectionString element not found in configuration.");
-            }
-
-            string connectionString = connNode.InnerText.Trim();
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                throw new InvalidOperationException("SQL connection string cannot be empty.");
-            }
-
-            Logger.Log(2, "SQL connection string retrieved successfully from XML config.");
-            return connectionString;
-        }
-        catch (InvalidOperationException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Error retrieving SQL connection string: " + ex.Message);
-            throw new InvalidOperationException("Failed to retrieve SQL connection string.", ex);
-        }
-    }
-
-    public static bool IsTwoFactorEnabled()
-    {
-        LoadConfig();
-
-        try
-        {
-            var secNode = _xmlDoc.SelectSingleNode("//Configuration/Security");
-            if (secNode == null)
-            {
-                return false;
-            }
-
-            var enabledNode = secNode.SelectSingleNode("TwoFactorEnabled");
-            if (enabledNode == null)
-            {
-                return false;
-            }
-
-            return bool.TryParse(enabledNode.InnerText.Trim(), out bool result) && result;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public static string GetTwoFactorSecret()
-    {
-        LoadConfig();
-
-        try
-        {
-            var secNode = _xmlDoc.SelectSingleNode("//Configuration/Security");
-            return secNode?.SelectSingleNode("TwoFactorSecret")?.InnerText.Trim() ?? string.Empty;
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-    public static string GetSharePointBaseUrl()
-    {
-        lock (_lock)
+        lock (Lock)
         {
             if (!string.IsNullOrEmpty(_sharePointBaseUrlOverride))
             {
@@ -334,17 +206,11 @@ public static class ConfigurationReader
             }
         }
 
-        LoadConfig();
-
         try
         {
-            var spNode = _xmlDoc.SelectSingleNode("//Configuration/SharePoint");
-            if (spNode == null)
-            {
-                return null;
-            }
-
-            var baseUrlNode = spNode.SelectSingleNode("BaseUrl");
+            XmlDocument document = LoadConfig();
+            var spNode = document.SelectSingleNode("//Configuration/SharePoint");
+            var baseUrlNode = spNode?.SelectSingleNode("BaseUrl");
             if (baseUrlNode == null)
             {
                 Logger.LogDebug("SharePoint BaseUrl not configured in XML, using default.");
@@ -370,11 +236,11 @@ public static class ConfigurationReader
 
     public static IEnumerable<SharePointListConfig> GetSharePointListConfigurations()
     {
-        LoadConfig();
+        XmlDocument document = LoadConfig();
 
         try
         {
-            var listNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/SharePointLists/List");
+            var listNodes = document.SelectNodes("//Configuration/ReplicationConfiguration/SharePointLists/List");
             if (listNodes == null || listNodes.Count == 0)
             {
                 Logger.Log(2, "No SharePoint list configurations found.");
@@ -403,10 +269,10 @@ public static class ConfigurationReader
 
             return configurations;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
-            Console.WriteLine("Error reading SharePoint list configurations: " + ex.Message);
-            throw new Exception("Failed to read SharePoint list configurations.", ex);
+            Logger.LogError("Error reading SharePoint list configurations", ex);
+            throw new InvalidOperationException("Failed to read SharePoint list configurations.", ex);
         }
     }
 
@@ -418,10 +284,8 @@ public static class ConfigurationReader
 
     private static bool GetNodeValueBool(XmlNode parentNode, string nodeName, bool defaultValue)
     {
-        var value = GetNodeValue(parentNode, nodeName);
-        return !string.IsNullOrEmpty(value) && bool.TryParse(value, out bool result)
-            ? result
-            : defaultValue;
+        string value = GetNodeValue(parentNode, nodeName);
+        return bool.TryParse(value, out bool result) ? result : defaultValue;
     }
 
     private static bool IsValidListConfig(SharePointListConfig config)
@@ -447,13 +311,13 @@ public static class ConfigurationReader
         return true;
     }
 
-    public static Dictionary<string, ListConfiguration> GetListConfigurations()
+    public static Dictionary<string, ListConfiguration>? GetListConfigurations()
     {
-        LoadConfig();
+        XmlDocument document = LoadConfig();
 
         try
         {
-            var listNodes = _xmlDoc.SelectNodes("//Configuration/ReplicationConfiguration/Lists/List");
+            var listNodes = document.SelectNodes("//Configuration/ReplicationConfiguration/Lists/List");
             if (listNodes == null || listNodes.Count == 0)
             {
                 return null;
@@ -463,34 +327,36 @@ public static class ConfigurationReader
 
             foreach (XmlNode listNode in listNodes)
             {
-                var nameAttr = listNode.Attributes["name"];
-                var contextAttr = listNode.Attributes["sharepointlist"];
-                var ignoreAttr = listNode.Attributes["ignore"];
-
-                if (nameAttr != null)
+                var nameAttr = listNode.Attributes?["name"];
+                if (nameAttr == null)
                 {
-                    var listConfig = new ListConfiguration
-                    {
-                        Name = nameAttr.Value,
-                        SharepointList = contextAttr?.Value,
-                        Ignore = ParseBoolean(ignoreAttr?.Value, false),
-                        Columns = GetListColumns(listNode)
-                    };
-
-                    listConfigs[listConfig.Name] = listConfig;
+                    continue;
                 }
+
+                var contextAttr = listNode.Attributes?["sharepointlist"];
+                var ignoreAttr = listNode.Attributes?["ignore"];
+
+                var listConfig = new ListConfiguration
+                {
+                    Name = nameAttr.Value,
+                    SharepointList = contextAttr?.Value ?? string.Empty,
+                    Ignore = ParseBoolean(ignoreAttr?.Value, false),
+                    Columns = GetListColumns(listNode)
+                };
+
+                listConfigs[listConfig.Name] = listConfig;
             }
 
             return listConfigs.Count > 0 ? listConfigs : null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
-            Console.WriteLine("Error reading list configurations: " + ex.Message);
-            throw;
+            Logger.LogError("Error reading list configurations", ex);
+            throw new InvalidOperationException("Error reading list configurations.", ex);
         }
     }
 
-    private static Dictionary<string, ColumnMapping> GetListColumns(XmlNode listNode)
+    private static Dictionary<string, ColumnMapping>? GetListColumns(XmlNode listNode)
     {
         var columnNodes = listNode.SelectNodes(".//Columns/column");
         if (columnNodes == null || columnNodes.Count == 0)
@@ -502,50 +368,52 @@ public static class ConfigurationReader
 
         foreach (XmlNode node in columnNodes)
         {
-            var sourceAttr = node.Attributes["source"];
-            var destAttr = node.Attributes["destination"];
-            var ignoreAttr = node.Attributes["ignore"];
-            var datatypeAttr = node.Attributes["datatype"];
-
-            if (sourceAttr != null)
+            var sourceAttr = node.Attributes?["source"];
+            if (sourceAttr == null)
             {
-                var mapping = new ColumnMapping
-                {
-                    Source = sourceAttr.Value,
-                    Destination = destAttr?.Value ?? sourceAttr.Value,
-                    Ignore = ParseBoolean(ignoreAttr?.Value, false),
-                    DataType = datatypeAttr?.Value
-                };
-
-                columnMappings[mapping.Source] = mapping;
+                continue;
             }
+
+            var destAttr = node.Attributes?["destination"];
+            var ignoreAttr = node.Attributes?["ignore"];
+            var datatypeAttr = node.Attributes?["datatype"];
+
+            var mapping = new ColumnMapping
+            {
+                Source = sourceAttr.Value,
+                Destination = destAttr?.Value ?? sourceAttr.Value,
+                Ignore = ParseBoolean(ignoreAttr?.Value, false),
+                DataType = datatypeAttr?.Value
+            };
+
+            columnMappings[mapping.Source] = mapping;
         }
 
         return columnMappings.Count > 0 ? columnMappings : null;
     }
 }
 
-public class SharePointListConfig
+public sealed class SharePointListConfig
 {
-    public string SiteUrl { get; set; }
-    public string ListTitle { get; set; }
-    public string SqlTable { get; set; }
+    public string SiteUrl { get; set; } = string.Empty;
+    public string ListTitle { get; set; } = string.Empty;
+    public string SqlTable { get; set; } = string.Empty;
     public bool AutoAddNewColumns { get; set; }
     public bool Disabled { get; set; }
 }
 
-public class ColumnMapping
+public sealed class ColumnMapping
 {
-    public string Source { get; set; }
-    public string Destination { get; set; }
+    public string Source { get; set; } = string.Empty;
+    public string Destination { get; set; } = string.Empty;
     public bool Ignore { get; set; }
-    public string DataType { get; set; }
+    public string? DataType { get; set; }
 }
 
-public class ListConfiguration
+public sealed class ListConfiguration
 {
-    public string Name { get; set; }
-    public string SharepointList { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string SharepointList { get; set; } = string.Empty;
     public bool Ignore { get; set; }
-    public Dictionary<string, ColumnMapping> Columns { get; set; }
+    public Dictionary<string, ColumnMapping>? Columns { get; set; }
 }

@@ -35,7 +35,7 @@ trim_trailing_whitespace = false
 [*.cs]
 
 # New line preferences
-end_of_line = crlf
+end_of_line = lf
 insert_final_newline = true
 
 # Indentation preferences

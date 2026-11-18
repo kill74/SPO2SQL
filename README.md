@@ -14,7 +14,7 @@
 - Per-list column mapping, destination names, data types, and ignore rules.
 - Retry handling for transient SharePoint and network failures.
 - Startup health checks for SharePoint and SQL connectivity.
-- Operation statistics, structured logging, and cancellation support.
+- End-to-end async I/O with cancellation, per-list operation statistics and structured logging.
 - Credential providers for environment variables, Windows DPAPI, and application configuration.
 - Automated build, test, formatting, dependency-audit, and CodeQL workflows.
 
@@ -53,7 +53,9 @@ docs/                   Configuration, security, modernization, and operational 
 - SQL Server access with permission to read source metadata and create/update destination tables
 - A SharePoint account or supported application identity configured for the target tenant
 
-The current authentication path uses username/password token acquisition. Environments requiring interactive MFA or Conditional Access should use an app-only/service-principal authentication design instead of relying on password-based authentication.
+Two authentication modes are supported. For unattended jobs, configure app-only authentication by setting `SharePoint:TenantId`, `SharePoint:ClientId` and `SharePoint:CertificatePath` (plus `CertificatePassword` when the PFX is protected); this uses client credentials with a certificate and is not blocked by MFA or Conditional Access. When those values are absent, the legacy username/password flow is used as a fallback, which will fail in tenants that enforce MFA.
+
+Run `dotnet run -- --setup-secrets` to store credentials in the current user's DPAPI-protected store (Windows only).
 
 ## Build and test
 
@@ -98,7 +100,11 @@ The console application binds these sections:
     "Password": "",
     "TimeoutSeconds": 120,
     "MaxRetries": 3,
-    "InitialRetryDelayMs": 1000
+    "InitialRetryDelayMs": 1000,
+    "TenantId": "",
+    "ClientId": "",
+    "CertificatePath": "",
+    "CertificatePassword": ""
   },
   "Sql": {
     "ConnectionString": "Server=.;Database=SPO2SQL;Integrated Security=true;Encrypt=true;TrustServerCertificate=false;",
@@ -160,7 +166,7 @@ The detailed security guidance is available in [`docs/SECURITY.md`](docs/SECURIT
 
 ## CI/CD
 
-GitHub Actions runs on pushes and pull requests:
+GitHub Actions runs on pushes and pull requests on both Linux and Windows:
 
 1. Restore NuGet dependencies.
 2. Build with warnings treated as errors.

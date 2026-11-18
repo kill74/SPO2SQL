@@ -41,6 +41,17 @@ public class CamlQueryBuilderTests
     }
 
     [Fact]
+    public void BuildDateRangeQuery_WithUtcDates_DoesNotShiftValues()
+    {
+        var from = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var result = CamlQueryBuilder.BuildDateRangeQuery("Modified", from, from.AddHours(1));
+
+        result.Should().Contain("2024-01-01T00:00:00Z")
+              .And.Contain("2024-01-01T01:00:00Z");
+    }
+
+    [Fact]
     public void BuildDateRangeQuery_WithInvalidRange_ThrowsArgumentException()
     {
         var from = DateTime.UtcNow;

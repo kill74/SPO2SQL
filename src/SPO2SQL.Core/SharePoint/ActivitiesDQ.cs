@@ -1,5 +1,3 @@
-using System;
-using Microsoft.SharePoint.Client;
 using SPO2SQL.Logging;
 
 namespace SPO2SQL.SharePoint;
@@ -15,7 +13,7 @@ internal sealed class ActivitiesDQ : DataQualityBase
     {
     }
 
-    public override bool Execute()
+    public override async Task<bool> ExecuteAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -28,7 +26,8 @@ internal sealed class ActivitiesDQ : DataQualityBase
                 "</IsNull></Where></Query>" +
                 "</View>";
 
-            var activitiesList = CreateAndBuildList(LIST_NAME, SITE, camlQuery);
+            using var activitiesList = await CreateAndBuildListAsync(LIST_NAME, SITE, camlQuery, cancellationToken)
+                .ConfigureAwait(false);
 
             if (activitiesList.ItemCollection.Count == 0)
             {
@@ -36,7 +35,7 @@ internal sealed class ActivitiesDQ : DataQualityBase
                 return true;
             }
 
-            ProcessListItemsInBatches(activitiesList, item =>
+            await ProcessListItemsInBatchesAsync(activitiesList, item =>
             {
                 var sourceValue = GetFieldValue<object>(item, SOURCE_FIELD);
                 if (sourceValue != null)
@@ -44,14 +43,16 @@ internal sealed class ActivitiesDQ : DataQualityBase
                     SetFieldValue(item, TARGET_FIELD, sourceValue);
                     item.Update();
                 }
-            });
+
+                return Task.CompletedTask;
+            }, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             Logger.LogWarning($"Completed {LIST_NAME} update: {activitiesList.ItemCollection.Count} items processed");
             return true;
         }
         catch (Exception ex)
         {
-            Logger.LogError($"Failed to update activities data quality", ex);
+            Logger.LogError("Failed to update activities data quality", ex);
             return false;
         }
     }

@@ -7,14 +7,22 @@ internal sealed class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        if (args.Any(a => string.Equals(a, "--setup-secrets", StringComparison.OrdinalIgnoreCase)))
+        {
+            return CredentialSetup.Run();
+        }
+
         try
         {
             var builder = CreateHostBuilder(args);
-            using var host = builder.Build();
+            var host = builder.Build();
+
+            // RunAsync disposes the host when it completes, so resolve the outcome first.
+            var exitCode = host.Services.GetRequiredService<SyncExitCode>();
 
             await host.RunAsync();
 
-            return 0;
+            return exitCode.Value;
         }
         catch (OptionsValidationException ex)
         {
@@ -81,7 +89,7 @@ internal sealed class Program
                     .ValidateDataAnnotations()
                     .ValidateOnStart();
 
-                services.AddHttpClient();
+                services.AddSingleton<SyncExitCode>();
                 services.AddHostedService<Application>();
             });
 }

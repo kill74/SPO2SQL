@@ -57,6 +57,42 @@ public class RetryPolicyTests
     }
 
     [Fact]
+    public async Task ExecuteWithRetryAsync_SucceedsOnRetry_ReturnsResult()
+    {
+        var policy = new RetryPolicy(maxRetries: 3, initialDelayMs: 100);
+        var attempts = 0;
+
+        var result = await policy.ExecuteWithRetryAsync(async () =>
+        {
+            attempts++;
+            await Task.Yield();
+            if (attempts < 3)
+            {
+                throw new TimeoutException("Simulated transient error");
+            }
+
+            return 42;
+        }, CancellationToken.None);
+
+        result.Should().Be(42);
+        attempts.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_WithCancellation_ThrowsOperationCanceledException()
+    {
+        var policy = new RetryPolicy(maxRetries: 3, initialDelayMs: 100);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = async () => await policy.ExecuteWithRetryAsync(
+            () => Task.FromResult(1),
+            cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public void IsTransientError_WithTimeoutException_ReturnsTrue()
     {
         var result = RetryPolicy.IsTransientError(new TimeoutException());
@@ -67,7 +103,7 @@ public class RetryPolicyTests
     [Fact]
     public void IsTransientError_WithNull_ReturnsFalse()
     {
-        var result = RetryPolicy.IsTransientError(null);
+        var result = RetryPolicy.IsTransientError(null!);
 
         result.Should().BeFalse();
     }
