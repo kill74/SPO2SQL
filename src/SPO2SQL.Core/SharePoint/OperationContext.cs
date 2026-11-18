@@ -7,7 +7,7 @@ public class OperationContext
 {
     public string CorrelationId { get; set; } = Guid.NewGuid().ToString("N");
 
-    public string OperationName { get; set; }
+    public string OperationName { get; set; } = string.Empty;
 
     public DateTime StartTime { get; set; } = DateTime.Now;
 

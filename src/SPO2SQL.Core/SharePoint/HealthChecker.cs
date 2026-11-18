@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Microsoft.Data.SqlClient;
 using Microsoft.SharePoint.Client;
 using SPO2SQL.Logging;
@@ -13,8 +11,8 @@ public class HealthChecker
     public class HealthCheckResult
     {
         public bool IsHealthy { get; set; } = true;
-        public List<string> Warnings { get; set; } = new List<string>();
-        public List<string> Errors { get; set; } = new List<string>();
+        public List<string> Warnings { get; set; } = [];
+        public List<string> Errors { get; set; } = [];
 
         public override string ToString()
         {
@@ -24,19 +22,13 @@ public class HealthChecker
             if (Errors.Count > 0)
             {
                 result += $"\nErrors ({Errors.Count}):";
-                foreach (var error in Errors)
-                {
-                    result += $"\n  \u2717 {error}";
-                }
+                result = Errors.Aggregate(result, (current, error) => current + $"\n  ✗ {error}");
             }
 
             if (Warnings.Count > 0)
             {
                 result += $"\nWarnings ({Warnings.Count}):";
-                foreach (var warning in Warnings)
-                {
-                    result += $"\n  \u26A0 {warning}";
-                }
+                result = Warnings.Aggregate(result, (current, warning) => current + $"\n  ⚠ {warning}");
             }
 
             return result;
@@ -48,7 +40,11 @@ public class HealthChecker
         _verbosity = verbosity;
     }
 
-    public HealthCheckResult PerformHealthCheck(SPOUser spoUser, string sharePointUrl, string sqlConnectionString)
+    public async Task<HealthCheckResult> PerformHealthCheckAsync(
+        SPOUser spoUser,
+        string sharePointUrl,
+        string sqlConnectionString,
+        CancellationToken cancellationToken = default)
     {
         var result = new HealthCheckResult();
 
@@ -59,9 +55,11 @@ public class HealthChecker
 
         ValidateSPOUserCredentials(spoUser, result);
 
-        ValidateSharePointConnectivity(spoUser, sharePointUrl, result);
+        await ValidateSharePointConnectivityAsync(spoUser, sharePointUrl, result, cancellationToken)
+            .ConfigureAwait(false);
 
-        ValidateSqlConnectivity(sqlConnectionString, result);
+        await ValidateSqlConnectivityAsync(sqlConnectionString, result, cancellationToken)
+            .ConfigureAwait(false);
 
         result.IsHealthy = result.Errors.Count == 0;
 
@@ -73,75 +71,58 @@ public class HealthChecker
         return result;
     }
 
-    private static void ValidateSPOUserCredentials(SPOUser spoUser, HealthCheckResult result)
+    private static void ValidateSPOUserCredentials(SPOUser? spoUser, HealthCheckResult result)
     {
         if (spoUser == null)
         {
             result.Errors.Add("SPOUser is null - SharePoint credentials not initialized.");
-            result.IsHealthy = false;
             return;
         }
 
         if (string.IsNullOrWhiteSpace(spoUser.Username))
         {
             result.Errors.Add("SharePoint username is empty or null.");
-            result.IsHealthy = false;
         }
-
-        // Credential material is intentionally not exposed by SPOUser; connectivity
-        // validation below is the authoritative authentication check.
     }
 
-    private void ValidateSharePointConnectivity(SPOUser spoUser, string sharePointUrl, HealthCheckResult result)
+    private async Task ValidateSharePointConnectivityAsync(
+        SPOUser spoUser,
+        string sharePointUrl,
+        HealthCheckResult result,
+        CancellationToken cancellationToken)
     {
         try
         {
-            if (spoUser == null)
-            {
-                result.Errors.Add("SPOUser is null - cannot validate connectivity.");
-                return;
-            }
-
             if (string.IsNullOrWhiteSpace(sharePointUrl))
             {
                 result.Errors.Add("SharePoint URL is not configured.");
                 return;
             }
 
-            if (!sharePointUrl.StartsWith("https://") && !sharePointUrl.StartsWith("http://"))
+            if (!sharePointUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+                !sharePointUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
             {
                 result.Errors.Add("SharePoint URL must start with http:// or https://");
                 return;
             }
 
-            using (var clientContext = new ClientContext(sharePointUrl))
+            using var clientContext = new ClientContext(sharePointUrl);
+            spoUser.ApplyAuthentication(clientContext, sharePointUrl);
+
+            var web = clientContext.Web;
+            clientContext.Load(web, w => w.Title);
+
+            try
             {
-                if (spoUser != null)
+                await clientContext.ExecuteQueryWithCancellationAsync(cancellationToken).ConfigureAwait(false);
+                if (_verbosity >= 3)
                 {
-                    spoUser.ApplyAuthentication(clientContext, sharePointUrl);
+                    Logger.Log(3, $"✓ SharePoint connectivity verified. Site: {web.Title}");
                 }
-
-                if (clientContext == null)
-                {
-                    result.Errors.Add("Failed to create SharePoint client context.");
-                    return;
-                }
-
-                var web = clientContext.Web;
-                clientContext.Load(web, w => w.Title);
-
-                try
-                {
-                    clientContext.ExecuteQuery();
-                    if (_verbosity >= 3)
-                    {
-                        Logger.Log(3, $"\u2713 SharePoint connectivity verified. Site: {web.Title}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    result.Errors.Add($"SharePoint connection failed: {ex.Message}");
-                }
+            }
+            catch (Exception ex)
+            {
+                result.Errors.Add($"SharePoint connection failed: {ex.Message}");
             }
         }
         catch (Exception ex)
@@ -150,7 +131,10 @@ public class HealthChecker
         }
     }
 
-    private void ValidateSqlConnectivity(string sqlConnectionString, HealthCheckResult result)
+    private async Task ValidateSqlConnectivityAsync(
+        string sqlConnectionString,
+        HealthCheckResult result,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -160,15 +144,12 @@ public class HealthChecker
                 return;
             }
 
-            using (var connection = new SqlConnection(sqlConnectionString))
-            {
-                connection.Open();
-                if (_verbosity >= 3)
-                {
-                    Logger.Log(3, "\u2713 SQL Server connectivity verified.");
-                }
+            await using var connection = new SqlConnection(sqlConnectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-                connection.Close();
+            if (_verbosity >= 3)
+            {
+                Logger.Log(3, "✓ SQL Server connectivity verified.");
             }
         }
         catch (SqlException sqlEx)
@@ -181,7 +162,11 @@ public class HealthChecker
         }
     }
 
-    public HealthCheckResult ValidateListAccess(SPOUser spoUser, string sharePointUrl, string listName)
+    public async Task<HealthCheckResult> ValidateListAccessAsync(
+        SPOUser spoUser,
+        string sharePointUrl,
+        string listName,
+        CancellationToken cancellationToken = default)
     {
         var result = new HealthCheckResult();
 
@@ -201,29 +186,24 @@ public class HealthChecker
                 return result;
             }
 
-            using (var clientContext = new ClientContext(sharePointUrl))
+            using var clientContext = new ClientContext(sharePointUrl);
+            spoUser?.ApplyAuthentication(clientContext, sharePointUrl);
+
+            var list = clientContext.Web.Lists.GetByTitle(listName);
+            clientContext.Load(list, l => l.Title, l => l.ItemCount);
+
+            try
             {
-                if (spoUser != null)
+                await clientContext.ExecuteQueryWithCancellationAsync(cancellationToken).ConfigureAwait(false);
+                if (_verbosity >= 3)
                 {
-                    spoUser.ApplyAuthentication(clientContext, sharePointUrl);
+                    Logger.Log(3, $"✓ List '{listName}' is accessible ({list.ItemCount} items)");
                 }
-
-                var list = clientContext.Web.Lists.GetByTitle(listName);
-                clientContext.Load(list, l => l.Title, l => l.ItemCount);
-
-                try
-                {
-                    clientContext.ExecuteQuery();
-                    if (_verbosity >= 3)
-                    {
-                        Logger.Log(3, $"\u2713 List '{listName}' is accessible ({list.ItemCount} items)");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    result.Errors.Add($"Cannot access list '{listName}': {ex.Message}");
-                    result.IsHealthy = false;
-                }
+            }
+            catch (Exception ex)
+            {
+                result.Errors.Add($"Cannot access list '{listName}': {ex.Message}");
+                result.IsHealthy = false;
             }
         }
         catch (Exception ex)

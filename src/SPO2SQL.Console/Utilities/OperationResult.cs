@@ -94,9 +94,9 @@ public static class OperationResultExtensions
         {
             OperationResult<T>.SuccessResult => "Success",
             OperationResult<T>.FailureResult { ErrorCode: "NotFound" } => "Resource Not Found",
-            OperationResult<T>.FailureResult { ErrorCode: var code } when code?.StartsWith("Auth") == true =>
+            OperationResult<T>.FailureResult { ErrorCode: var code } when code?.StartsWith("Auth", StringComparison.Ordinal) == true =>
                 "Authentication/Authorization Error",
-            OperationResult<T>.FailureResult { ErrorCode: var code } when code?.StartsWith("Validation") == true =>
+            OperationResult<T>.FailureResult { ErrorCode: var code } when code?.StartsWith("Validation", StringComparison.Ordinal) == true =>
                 "Validation Error",
             OperationResult<T>.FailureResult { Exception: not null } => "Exception Occurred",
             OperationResult<T>.FailureResult => "General Error",

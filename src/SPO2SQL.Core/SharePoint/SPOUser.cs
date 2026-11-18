@@ -109,10 +109,12 @@ public sealed class SPOUser : IDisposable
             {
                 try
                 {
+#pragma warning disable CS0618 // ROPC is kept only as a fallback for legacy tenants.
                     result = await _publicApp!
                         .AcquireTokenByUsernamePassword([scope], Username, _plainPassword)
                         .ExecuteAsync()
                         .ConfigureAwait(false);
+#pragma warning restore CS0618
                 }
                 catch (MsalUiRequiredException ex)
                 {

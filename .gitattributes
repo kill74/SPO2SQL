@@ -3,6 +3,10 @@
 ###############################################################################
 * text=auto
 
+# C# sources are normalized to LF so dotnet format behaves identically on
+# Windows and Linux agents.
+*.cs text eol=lf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #

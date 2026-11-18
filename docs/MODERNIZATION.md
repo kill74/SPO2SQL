@@ -6,12 +6,12 @@ This document explains the modern .NET 8 architecture and how to configure and r
 
 ### Modern Architecture
 - **Dependency Injection**: Full DI container with IHost pattern
-- **Async/Await**: All I/O operations use async patterns (work in progress)
-- **Structured Logging**: ILogger<T> with semantic log properties
-- **Configuration**: appsettings.json with IOptions<T> pattern
-- **Security**: User Secrets (dev) and Environment Variables (prod) for credentials
-- **Resilience**: Polly integration for retry policies (coming soon)
-- **Testing**: Unit and integration test support (coming soon)
+- **Async/Await**: All SharePoint, SQL and data-quality I/O uses async patterns with cancellation
+- **Structured Logging**: ILogger<T> in the host, bridged to the Core library
+- **Configuration**: appsettings.json with validated IOptions<T>, mapped to a single `SyncSettings` record
+- **Security**: User Secrets (dev), environment variables and app-only certificate authentication (prod)
+- **Resilience**: Cancellation-aware retry with exponential backoff and jitter
+- **Testing**: xUnit unit tests; integration tests require a live tenant/SQL Server
 
 ### Modern C# Features
 - Records for immutable configuration
@@ -25,23 +25,19 @@ This document explains the modern .NET 8 architecture and how to configure and r
 
 ### Development Setup (User Secrets)
 
-**Quick Setup with Helper Script**:
+**Quick Setup**:
 ```bash
-# Interactive setup wizard
-./scripts/setup-secrets.sh
+# Stores credentials in the current user's DPAPI-protected store (Windows)
+dotnet run --project src/SPO2SQL.Console/SPO2SQL.Console.csproj -- --setup-secrets
 ```
 
-The setup script will:
-- ✅ Initialize User Secrets automatically
-- ✅ Guide you through configuration
-- ✅ Validate email addresses and connection strings
-- ✅ Ensure security best practices
+For development, user secrets remain the preferred option; see the manual setup below.
 
 **Manual Setup**:
 
 1. **Initialize User Secrets** (one-time setup):
 ```bash
-cd SPOtoSQL-Net8/ConsoleApp1Net8
+cd src/SPO2SQL.Console
 dotnet user-secrets init
 ```
 
@@ -105,7 +101,7 @@ export SPO2SQL_Sql__ConnectionString="Server=myServer;Database=myDB;Integrated S
 
 ### Development
 ```bash
-cd SPOtoSQL-Net8/ConsoleApp1Net8
+cd src/SPO2SQL.Console
 dotnet restore
 dotnet build
 dotnet run
@@ -115,7 +111,7 @@ dotnet run
 ```bash
 dotnet publish -c Release -r win-x64 --self-contained false
 cd bin/Release/net8.0/win-x64/publish
-./ConsoleApp1Net8.exe
+dotnet run --project src/SPO2SQL.Console/SPO2SQL.Console.csproj
 ```
 
 ## Logging
@@ -165,7 +161,7 @@ Available log levels:
 
 Both versions can coexist:
 - **.NET Framework 4.8**: `SPOtoSQL-Snapshots/ConsoleApp1/`
-- **.NET 8**: `SPOtoSQL-Net8/ConsoleApp1Net8/`
+- **.NET 8**: `src/SPO2SQL.Console/`
 
 The .NET 8 version links to the same source files for now, so changes are shared.
 
@@ -189,25 +185,15 @@ Key security practices:
    dotnet user-secrets set "SharePoint:Password" "new-password"
    ```
 
-### Helper Scripts
+### Credential Setup
 
-**Development Setup**:
 ```bash
-# Interactive setup wizard (Linux/Mac)
-./scripts/setup-secrets.sh
-
-# Interactive setup wizard (Windows)
-.\scripts\setup-secrets.ps1
-
-# Verify configuration
-./scripts/verify-config.sh
+# Windows: store credentials in the current user's DPAPI-protected store
+dotnet run --project src/SPO2SQL.Console/SPO2SQL.Console.csproj -- --setup-secrets
 ```
 
-These scripts help you:
-- ✅ Set up User Secrets securely
-- ✅ Validate input (email format, connection strings, etc.)
-- ✅ Verify configuration without exposing credentials
-- ✅ Check for common security issues
+Configuration is validated at startup by the host, so an invalid connection
+string or an incomplete authentication configuration fails fast with a clear message.
 
 ## Troubleshooting
 

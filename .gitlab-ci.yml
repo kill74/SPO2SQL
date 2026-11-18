@@ -56,5 +56,5 @@ format:
 nuget_audit:
   stage: security
   script:
-    - dotnet nuget audit
+    - dotnet restore --force /p:NuGetAudit=true /p:NuGetAuditMode=all /p:NuGetAuditLevel=moderate
   allow_failure: true

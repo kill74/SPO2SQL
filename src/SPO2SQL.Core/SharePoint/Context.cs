@@ -1,6 +1,3 @@
-using System;
-using System.Linq.Expressions;
-using System.Net;
 using Microsoft.SharePoint.Client;
 using SPO2SQL.Logging;
 using SPO2SQL.XmlConfig;
@@ -9,15 +6,15 @@ namespace SPO2SQL.SharePoint;
 
 public class Context : IDisposable
 {
-    internal Web web;
+    internal Web? web;
 
-    public string Site { get; set; }
+    public string Site { get; set; } = string.Empty;
 
-    public SPOUser SPOUser { get; set; }
+    public SPOUser SPOUser { get; set; } = null!;
 
-    public ClientContext Ctx { get; set; }
+    public ClientContext Ctx { get; set; } = null!;
 
-    public void BuildContext()
+    public async Task BuildContextAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -32,12 +29,13 @@ public class Context : IDisposable
             SPOUser.ApplyAuthentication(clientContext, url);
 
             Ctx = clientContext;
-            web = Ctx.Web;
+            Web currentWeb = Ctx.Web;
+            web = currentWeb;
 
-            Ctx.Load(web, w => w.Title, w => w.Url);
-            Ctx.ExecuteQuery();
+            Ctx.Load(currentWeb, w => w.Title, w => w.Url);
+            await ExecuteQueryAsync(cancellationToken).ConfigureAwait(false);
 
-            Logger.LogDebug($"SharePoint context established successfully for site: {web.Title}");
+            Logger.LogDebug($"SharePoint context established successfully for site: {currentWeb.Title}");
         }
         catch (Exception ex)
         {
@@ -46,13 +44,19 @@ public class Context : IDisposable
         }
     }
 
+    protected async Task ExecuteQueryAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await Ctx.ExecuteQueryWithCancellationAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         Ctx?.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    public ListCollection GetAllLists()
+    public async Task<ListCollection> GetAllListsAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -63,12 +67,13 @@ public class Context : IDisposable
             if (web == null || Ctx?.Url != expectedUrl)
             {
                 Logger.LogDebug("Rebuilding context for GetAllLists");
-                BuildContext();
+                await BuildContextAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            var lists = web.Lists;
-            Ctx.Load(lists);
-            Ctx.ExecuteQuery();
+            var currentWeb = web ?? throw new InvalidOperationException("SharePoint context is not initialized.");
+            var lists = currentWeb.Lists;
+            Ctx!.Load(lists);
+            await ExecuteQueryAsync(cancellationToken).ConfigureAwait(false);
 
             Logger.LogDebug($"Retrieved {lists.Count} lists from site");
             return lists;

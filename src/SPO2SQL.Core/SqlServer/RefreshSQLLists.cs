@@ -7,7 +7,10 @@ namespace SPO2SQL.SqlServer;
 
 internal sealed class RefreshSQLLists
 {
-    public static void SPOtoSQLUpdate(SyncSettings settings, bool daily, CancellationToken cancellationToken = default)
+    public static async Task SPOtoSQLUpdateAsync(
+        SyncSettings settings,
+        bool daily,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
         Logger.Log(2, "SPOtoSQLUpdate: Starting SPO to SQL update. Daily: " + daily);
@@ -37,7 +40,8 @@ internal sealed class RefreshSQLLists
                     Logger.Log(1, $"SPOtoSQLUpdate: Processing list: {listName} with URL: {ctxURL}");
                     try
                     {
-                        RefreshListsSQL(listName, ctxURL, settings, user, daily, cancellationToken);
+                        await RefreshListsSQLAsync(listName, ctxURL, settings, user, daily, cancellationToken)
+                            .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                     {
@@ -47,7 +51,7 @@ internal sealed class RefreshSQLLists
                     catch (Exception ex)
                     {
                         failedLists++;
-                        Logger.LogError($"SPOtoSQLUpdate: ERROR - Exception while updating list '{listName}'.", ex);
+                        Logger.LogError($"SPOtoSQLUpdate: Exception while updating list '{listName}'.", ex);
                     }
                 }
             }
@@ -72,7 +76,7 @@ internal sealed class RefreshSQLLists
         Logger.Log(2, "SPOtoSQLUpdate: SPO to SQL update completed.");
     }
 
-    public static void RefreshListsSQL(
+    public static async Task RefreshListsSQLAsync(
         string listName,
         string ctxURL,
         SyncSettings settings,
@@ -104,20 +108,20 @@ internal sealed class RefreshSQLLists
             };
 
             var retryPolicy = new RetryPolicy(settings.MaxRetries, settings.InitialRetryDelayMs);
-            retryPolicy.ExecuteWithRetry(
-                () => sqlInteraction.Build(),
+            await retryPolicy.ExecuteWithRetryAsync(
+                () => sqlInteraction.BuildAsync(),
                 cancellationToken,
-                $"Build SQL interaction for '{listName}'");
+                $"Build SQL interaction for '{listName}'").ConfigureAwait(false);
 
             if (daily)
             {
                 Logger.Log(2, "RefreshListsSQL: Performing daily update...");
-                sqlInteraction.DailyUpdate();
+                await sqlInteraction.DailyUpdateAsync().ConfigureAwait(false);
             }
             else
             {
                 Logger.Log(2, "RefreshListsSQL: Performing current time update...");
-                sqlInteraction.CurrentTimeUpdate();
+                await sqlInteraction.CurrentTimeUpdateAsync().ConfigureAwait(false);
             }
 
             statistics.TotalItemsProcessed = spoList.ItemCollection.Count;

@@ -74,12 +74,10 @@ public sealed class Application : BackgroundService
                 settings.HasAppOnlyAuth ? "app-only" : "username/password",
                 settings.EnableMetrics);
 
-            await Task.Run(
-                () => RefreshSQLLists.SPOtoSQLUpdate(
-                    settings: settings,
-                    daily: _appOptions.DailyMode,
-                    cancellationToken: stoppingToken),
-                stoppingToken).ConfigureAwait(false);
+            await RefreshSQLLists.SPOtoSQLUpdateAsync(
+                settings: settings,
+                daily: _appOptions.DailyMode,
+                cancellationToken: stoppingToken).ConfigureAwait(false);
 
             _logger.LogInformation("SharePoint to SQL synchronization completed successfully");
         }
@@ -178,8 +176,10 @@ public sealed class Application : BackgroundService
             using var spoUser = SPOUserFactory.Create(settings);
             var checker = new HealthChecker();
 
-            var result = await Task.Run(
-                () => checker.PerformHealthCheck(spoUser, settings.SiteUrl, settings.SqlConnectionString),
+            var result = await checker.PerformHealthCheckAsync(
+                spoUser,
+                settings.SiteUrl,
+                settings.SqlConnectionString,
                 cancellationToken).ConfigureAwait(false);
 
             foreach (string warning in result.Warnings)

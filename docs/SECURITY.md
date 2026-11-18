@@ -28,7 +28,7 @@ This document outlines security best practices for deploying and operating the S
 
 ```bash
 # Navigate to project directory
-cd SPOtoSQL-Net8/ConsoleApp1Net8
+cd src/SPO2SQL.Console
 
 # Set credentials (stored encrypted outside project directory)
 dotnet user-secrets set "SharePoint:Username" "dev@company.com"
@@ -549,7 +549,7 @@ The application automatically redacts:
 
 The `scripts/` directory contains tools to assist with secure configuration:
 
-- **setup-secrets.sh** / **setup-secrets.ps1**: Interactive script to configure User Secrets
+- **`dotnet run -- --setup-secrets`**: Interactive command to store credentials in the Windows DPAPI-protected user store; on other platforms use environment variables or user secrets.
 - **verify-config.sh**: Validates configuration without exposing credentials
 
 ### Documentation
