@@ -39,9 +39,12 @@ public sealed class Application : BackgroundService
     {
         Logger.Configure(_loggerFactory.CreateLogger("SPO2SQL"));
 
-        _logger.LogInformation("═══════════════════════════════════════════════════════════");
-        _logger.LogInformation("  {AppName} v{Version}", _appOptions.Name, _appOptions.Version);
-        _logger.LogInformation("═══════════════════════════════════════════════════════════");
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("═══════════════════════════════════════════════════════════");
+            _logger.LogInformation("  {AppName} v{Version}", _appOptions.Name, _appOptions.Version);
+            _logger.LogInformation("═══════════════════════════════════════════════════════════");
+        }
 
         LogConfigurationSummary();
 
@@ -50,7 +53,10 @@ public sealed class Application : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("{AppName} stopping gracefully...", _appOptions.Name);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("{AppName} stopping gracefully...", _appOptions.Name);
+        }
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -68,11 +74,14 @@ public sealed class Application : BackgroundService
                 await PerformHealthChecksAsync(settings, stoppingToken).ConfigureAwait(false);
             }
 
-            _logger.LogInformation("Sync configuration: DailyMode={DailyMode}, BatchSize={BatchSize}, Auth={AuthMode}, Metrics={EnableMetrics}",
-                _appOptions.DailyMode,
-                settings.BatchSize,
-                settings.HasAppOnlyAuth ? "app-only" : "username/password",
-                settings.EnableMetrics);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Sync configuration: DailyMode={DailyMode}, BatchSize={BatchSize}, Auth={AuthMode}, Metrics={EnableMetrics}",
+                    _appOptions.DailyMode,
+                    settings.BatchSize,
+                    settings.HasAppOnlyAuth ? "app-only" : "username/password",
+                    settings.EnableMetrics);
+            }
 
             await RefreshSQLLists.SPOtoSQLUpdateAsync(
                 settings: settings,
@@ -99,6 +108,11 @@ public sealed class Application : BackgroundService
 
     private void LogConfigurationSummary()
     {
+        if (!_logger.IsEnabled(LogLevel.Information))
+        {
+            return;
+        }
+
         _logger.LogInformation("Configuration Summary:");
         _logger.LogInformation("  Environment: {Environment}", _appOptions.Environment);
         _logger.LogInformation("  Metrics Enabled: {EnableMetrics}", _appOptions.EnableMetrics);
@@ -157,7 +171,10 @@ public sealed class Application : BackgroundService
         if (File.Exists(configPath))
         {
             XmlConfig.ConfigurationReader.SetConfigPath(configPath);
-            _logger.LogInformation("Legacy config path set to: {ConfigPath}", configPath);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Legacy config path set to: {ConfigPath}", configPath);
+            }
         }
         else
         {
