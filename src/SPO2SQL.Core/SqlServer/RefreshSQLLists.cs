@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SPO2SQL.Configuration;
 using SPO2SQL.Logging;
 using SPO2SQL.SharePoint;
@@ -87,6 +88,10 @@ internal sealed class RefreshSQLLists
         bool daily,
         CancellationToken cancellationToken = default)
     {
+        using Activity? activity = SyncTracing.Source.StartActivity("spo2sql.sync.list", ActivityKind.Internal);
+        activity?.SetTag(SyncTracing.ListTag, listName);
+        activity?.SetTag(SyncTracing.ModeTag, daily ? "incremental" : "full");
+
         var statistics = new OperationStatistics { StartTime = DateTime.UtcNow };
 
         try
@@ -147,6 +152,7 @@ internal sealed class RefreshSQLLists
         }
         catch (Exception ex)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             Logger.LogError($"RefreshListsSQL: FATAL ERROR updating list '{listName}'.", ex);
             throw;
         }

@@ -19,7 +19,7 @@
 - **Bounded parallelism** — independent lists are synchronized concurrently with `Application:MaxParallelLists` (default 4); failures in one list do not stop the others.
 - **App-only authentication** — certificate-based client credentials work under MFA and Conditional Access; username/password remains a legacy fallback.
 - **Startup health checks** — authenticated SharePoint connectivity and a real SQL connection are verified before any sync starts.
-- **Observability** — structured logging plus OpenTelemetry metrics (`spo2sql.lists.synced`, `spo2sql.items.*`, `spo2sql.sync.duration`) tagged by list and sync mode.
+- **Observability** — structured logging, OpenTelemetry metrics (`spo2sql.lists.synced`, `spo2sql.items.*`, `spo2sql.sync.duration`) and spans for each list sync, SharePoint read and SQL bulk copy.
 
 ---
 
@@ -148,7 +148,7 @@ Example:
 }
 ```
 
-`Sql:BatchSize` controls both the SharePoint page size and the number of rows sent per SQL bulk-copy batch. `Application:EnableMetrics` publishes the `SPO2SQL` OpenTelemetry meter; without `OTEL_EXPORTER_OTLP_ENDPOINT` metrics are written to the console.
+`Sql:BatchSize` controls both the SharePoint page size and the number of rows sent per SQL bulk-copy batch. `Application:EnableMetrics` publishes the `SPO2SQL` OpenTelemetry meter and activity source; without `OTEL_EXPORTER_OTLP_ENDPOINT` both are written to the console.
 
 Supply secrets outside source control. For local development:
 

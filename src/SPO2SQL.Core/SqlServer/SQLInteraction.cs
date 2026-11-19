@@ -1,10 +1,12 @@
 using System.Data;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Microsoft.Data.SqlClient;
 using Microsoft.SharePoint.Client;
 using SPO2SQL.Logging;
 using SPO2SQL.SharePoint;
+using SPO2SQL.Telemetry;
 using SPO2SQL.XmlConfig;
 
 namespace SPO2SQL.SqlServer;
@@ -102,7 +104,11 @@ internal sealed class SQLInteraction : IDisposable
         }
 
         Logger.Log(1, "[Build] Initializing SharePoint list structure...");
-        await List.BuildAsync(CancellationToken).ConfigureAwait(false);
+        using (Activity? readActivity = SyncTracing.Source.StartActivity("spo2sql.sharepoint.read", ActivityKind.Client))
+        {
+            readActivity?.SetTag(SyncTracing.ListTag, List.Name);
+            await List.BuildAsync(CancellationToken).ConfigureAwait(false);
+        }
 
         FNDictionary = new Dictionary<string, Field>(StringComparer.OrdinalIgnoreCase);
         BuildDictionary();
@@ -333,6 +339,10 @@ internal sealed class SQLInteraction : IDisposable
         }
 
         string safeTable = $"[{TableName.Replace("]", "]]")}]";
+
+        using Activity? writeActivity = SyncTracing.Source.StartActivity("spo2sql.sql.bulk_copy", ActivityKind.Client);
+        writeActivity?.SetTag(SyncTracing.ListTag, TableName);
+        writeActivity?.SetTag(SyncTracing.RowsTag, batch.Rows.Count);
 
         using var bulkCopy = new SqlBulkCopy(
             Connection!,
